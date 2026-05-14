@@ -6,27 +6,54 @@ import { Session } from '@supabase/supabase-js'
 import SignInScreen from './src/screens/SignInScreen'
 import SignUpScreen from './src/screens/SignUpScreen'
 import HomeScreen from './src/screens/HomeScreen'
+import ProfileSetupScreen from './src/screens/ProfileSetupScreen'
 
 const Stack = createNativeStackNavigator()
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
+  const [hasProfile, setHasProfile] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
+      if (session) checkProfile(session.user.id)
+      else setLoading(false)
     })
 
     supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      if (session) checkProfile(session.user.id)
+      else {
+        setHasProfile(false)
+        setLoading(false)
+      }
     })
   }, [])
+
+  async function checkProfile(userId: string) {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single()
+
+    setHasProfile(!!data)
+    setLoading(false)
+  }
+
+  if (loading) return null
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
+          hasProfile ? (
+            <Stack.Screen name="Home" component={HomeScreen} />
+          ) : (
+            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+          )
         ) : (
           <>
             <Stack.Screen name="SignIn" component={SignInScreen} />
