@@ -5,11 +5,9 @@ import { supabase } from './src/lib/supabase'
 import { Session } from '@supabase/supabase-js'
 import SignInScreen from './src/screens/SignInScreen'
 import SignUpScreen from './src/screens/SignUpScreen'
-import HomeScreen from './src/screens/HomeScreen'
 import ProfileSetupScreen from './src/screens/ProfileSetupScreen'
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'
-import AddRoundScreen from './src/screens/AddRoundScreen'
-import EnterScoresScreen from './src/screens/EnterScoresScreen'
+import TabNavigator from './src/navigation/TabNavigator'
 
 const Stack = createNativeStackNavigator()
 
@@ -53,11 +51,7 @@ export default function App() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           hasProfile ? (
-            <>
-              <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="AddRound" component={AddRoundScreen} />
-              <Stack.Screen name="EnterScores" component={EnterScoresScreen} />
-            </>
+            <Stack.Screen name="Main" component={TabNavigator} />
           ) : (
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
           )
