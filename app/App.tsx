@@ -7,7 +7,6 @@ import SignInScreen from './src/screens/SignInScreen'
 import SignUpScreen from './src/screens/SignUpScreen'
 import ProfileSetupScreen from './src/screens/ProfileSetupScreen'
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen'
-import TabNavigator from './src/navigation/TabNavigator'
 
 const Stack = createNativeStackNavigator()
 
@@ -51,7 +50,7 @@ export default function App() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           hasProfile ? (
-            <Stack.Screen name="Main" component={TabNavigator} />
+            <Stack.Screen name="Home" component={HomeScreen} />
           ) : (
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
           )

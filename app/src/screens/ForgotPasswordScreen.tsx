@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native'
 import { supabase } from '../lib/supabase'
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
 
   async function handlePasswordReset() {
     setLoading(true)
@@ -14,9 +13,9 @@ export default function ForgotPasswordScreen() {
     })
 
     if (error) {
-      setMessage(error.message)
+      Alert.alert('Error', error.message)
     } else {
-      setMessage('Check your email for a password reset link!')
+      Alert.alert('Check your email', 'We sent you a password reset link!')
     }
     setLoading(false)
   }
@@ -25,12 +24,6 @@ export default function ForgotPasswordScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Reset Password</Text>
       <Text style={styles.subtitle}>Enter your email and we'll send you a reset link</Text>
-
-      {message ? (
-        <View style={styles.messageBox}>
-          <Text style={styles.messageText}>{message}</Text>
-        </View>
-      ) : null}
 
       <Text style={styles.label}>Email</Text>
       <TextInput
@@ -70,16 +63,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#888888',
     marginBottom: 32
-  },
-  messageBox: {
-    backgroundColor: '#E1F5EE',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16
-  },
-  messageText: {
-    color: '#085041',
-    fontSize: 14
   },
   label: {
     fontSize: 14,
