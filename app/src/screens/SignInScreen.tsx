@@ -1,20 +1,27 @@
 import { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { supabase } from '../lib/supabase'
 
-export default function SignInScreen() {
+export default function SignInScreen({ navigation }: any) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [failedAttempts, setFailedAttempts] = useState(0)
+  const [errorMessage, setErrorMessage] = useState('')
 
   async function handleSignIn() {
     setLoading(true)
+    setErrorMessage('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
-      Alert.alert('Error', error.message)
-    } else {
-      Alert.alert('Success', 'Signed in successfully!')
+      const newFailedAttempts = failedAttempts + 1
+      setFailedAttempts(newFailedAttempts)
+      if (newFailedAttempts >= 3) {
+        setErrorMessage('Too many failed attempts. Please reset your password.')
+      } else {
+        setErrorMessage(`Incorrect email or password. ${3 - newFailedAttempts} attempt${3 - newFailedAttempts === 1 ? '' : 's'} remaining.`)
+      }
     }
     setLoading(false)
   }
@@ -22,6 +29,17 @@ export default function SignInScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome Back</Text>
+
+      {errorMessage ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+          {failedAttempts >= 3 && (
+            <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={styles.resetLink}>Reset Password →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
 
       <TextInput
         style={styles.input}
@@ -47,6 +65,15 @@ export default function SignInScreen() {
       >
         <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.createAccountButton}
+        onPress={() => navigation.navigate('SignUp')}
+      >
+        <Text style={styles.createAccountText}>
+          Don't have an account? <Text style={styles.createAccountLink}>Sign Up</Text>
+        </Text>
+      </TouchableOpacity>
     </View>
   )
 }
@@ -63,6 +90,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 32,
     color: '#1A1A1A'
+  },
+  errorBox: {
+    backgroundColor: '#FCEBEB',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16
+  },
+  errorText: {
+    color: '#791F1F',
+    fontSize: 14,
+    marginBottom: 4
+  },
+  resetLink: {
+    color: '#1D9E75',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4
   },
   input: {
     borderWidth: 1,
@@ -82,5 +126,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold'
-  }
+  },
+  createAccountButton: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  createAccountText: {
+    fontSize: 14,
+    color: '#888888',
+  },
+  createAccountLink: {
+    color: '#1D9E75',
+    fontWeight: '500',
+  },
 })
