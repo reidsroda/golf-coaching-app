@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Animated, Dimensions
+  ScrollView, Animated, Dimensions, TextInput
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -15,6 +15,13 @@ type HoleData = {
   fairway_hit: boolean | null
   gir: boolean | null
   penalties: number
+}
+
+type CourseHole = {
+  hole_number: number
+  par: number
+  yardage: number | null
+  stroke_index: number | null
 }
 
 type RoundSummary = {
@@ -41,10 +48,10 @@ function getScoreLabel(score: number, par: number): string {
 
 function scoreCellColor(score: number, par: number): string {
   const diff = score - par
-  if (diff <= -1) return C.fairway       // birdie or better — green
-  if (diff === 0) return C.ink1          // par — dark
-  if (diff === 1) return C.flagYellow    // bogey — yellow
-  return C.errorRed                      // double+ — red
+  if (diff <= -1) return C.fairway
+  if (diff === 0) return C.ink1
+  if (diff === 1) return C.flagYellow
+  return C.errorRed
 }
 
 // ─── Total Score Mode ─────────────────────────────────────────
@@ -78,12 +85,12 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
   const isOver = diff > 0
 
   const summaryFields: { key: keyof RoundSummary; label: string; sub: string }[] = [
-    { key: 'total_putts',  label: 'Total Putts',          sub: 'incl. all greens' },
-    { key: 'fairways_hit', label: 'Total Fairways',        sub: `of ${holes === 9 ? 7 : 14}` },
-    { key: 'penalties',    label: 'Penalties',             sub: 'OB, water, lost' },
-    { key: 'gir',          label: 'Greens in Regulation',  sub: `of ${holes}` },
-    { key: 'birdies',      label: 'Birdies',               sub: 'or better' },
-    { key: 'doubles',      label: 'Double Bogey +',        sub: 'or worse' },
+    { key: 'total_putts',  label: 'Total Putts',         sub: 'incl. all greens' },
+    { key: 'fairways_hit', label: 'Total Fairways',       sub: `of ${holes === 9 ? 7 : 14}` },
+    { key: 'penalties',    label: 'Penalties',            sub: 'OB, water, lost' },
+    { key: 'gir',          label: 'Greens in Regulation', sub: `of ${holes}` },
+    { key: 'birdies',      label: 'Birdies',              sub: 'or better' },
+    { key: 'doubles',      label: 'Double Bogey +',       sub: 'or worse' },
   ]
 
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
@@ -101,12 +108,13 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
         </Text>
         <Text style={s.title}>Final tally</Text>
 
-        {/* Score hero */}
         <View style={s.scoreCard}>
           <Text style={s.scoreCardLabel}>TOTAL SCORE</Text>
           <View style={s.scoreRow}>
-            <Text style={[s.scoreBig, summary.total_score > 0 && isOver && { color: C.errorRed },
-              summary.total_score > 0 && !isOver && { color: C.fairway }]}>
+            <Text style={[s.scoreBig,
+              summary.total_score > 0 && isOver && { color: C.errorRed },
+              summary.total_score > 0 && !isOver && { color: C.fairway }
+            ]}>
               {summary.total_score || '—'}
             </Text>
             {summary.total_score > 0 && (
@@ -126,7 +134,6 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
           </View>
         </View>
 
-        {/* Details */}
         <View style={s.detailsCard}>
           <View style={s.detailsHeader}>
             <Text style={s.detailsTitle}>ROUND DETAILS</Text>
@@ -173,17 +180,38 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
       score: null, putts: null, fairway_hit: null, gir: null, penalties: 0
     }))
   )
+  const [courseHoles, setCourseHoles] = useState<CourseHole[]>([])
   const [loading, setLoading] = useState(false)
+  const [customScoreText, setCustomScoreText] = useState('')
   const slideAnim = useRef(new Animated.Value(0)).current
 
+  // Load real hole data from Supabase
+  useEffect(() => {
+    async function loadHoles() {
+      if (!tee?.id) return
+      const { data } = await supabase
+        .from('course_holes')
+        .select('hole_number, par, yardage, stroke_index')
+        .eq('tee_set_id', tee.id)
+        .order('hole_number', { ascending: true })
+        .limit(holeCount)
+      if (data && data.length > 0) setCourseHoles(data)
+    }
+    loadHoles()
+  }, [tee?.id])
+
   const hole = holeData[currentHole]
+  const courseHole = courseHoles[currentHole]
+  const par = courseHole?.par ?? 4
+  const yardage = courseHole?.yardage ?? null
+  const strokeIndex = courseHole?.stroke_index ?? null
   const isLastHole = currentHole === holeCount - 1
-  const par: number = 4 // placeholder — next PR wires to course_holes
 
   function updateHole(field: keyof HoleData, value: any) {
     const updated = [...holeData]
     updated[currentHole] = { ...updated[currentHole], [field]: value }
     setHoleData(updated)
+    if (field === 'score') setCustomScoreText('')
   }
 
   function goToHole(index: number) {
@@ -194,23 +222,37 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
       Animated.timing(slideAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
     ]).start()
     setCurrentHole(index)
+    setCustomScoreText('')
   }
 
-  const gridScores = Array.from({ length: 7 }, (_, i) => par - 2 + i).filter(s => s > 0)
+  function handleCustomScore(text: string) {
+    setCustomScoreText(text)
+    const val = parseInt(text)
+    if (!isNaN(val) && val > 0 && val <= 20) {
+      const updated = [...holeData]
+      updated[currentHole] = { ...updated[currentHole], score: val }
+      setHoleData(updated)
+    }
+  }
+
+  // Score grid: par-2 up to 8, then custom input
+  const gridScores = Array.from({ length: 7 }, (_, i) => par - 2 + i)
+    .filter(sc => sc > 0 && sc <= 8)
 
   async function handleFinish() {
     setLoading(true)
     const holeRows = holeData.map((h, i) => ({
       round_id: round.id, hole_number: i + 1,
       score: h.score || 0, putts: h.putts || 0,
-      fairway_hit: h.fairway_hit ?? false, gir: h.gir ?? false, penalties: h.penalties || 0,
+      fairway_hit: h.fairway_hit ?? false, gir: h.gir ?? false,
+      penalties: h.penalties || 0,
     }))
     await supabase.from('holes').insert(holeRows)
 
-    const totalScore    = holeData.reduce((a, h) => a + (h.score || 0), 0)
-    const totalPutts    = holeData.reduce((a, h) => a + (h.putts || 0), 0)
-    const fairwaysHit   = holeData.filter(h => h.fairway_hit).length
-    const girCount      = holeData.filter(h => h.gir).length
+    const totalScore     = holeData.reduce((a, h) => a + (h.score || 0), 0)
+    const totalPutts     = holeData.reduce((a, h) => a + (h.putts || 0), 0)
+    const fairwaysHit    = holeData.filter(h => h.fairway_hit).length
+    const girCount       = holeData.filter(h => h.gir).length
     const totalPenalties = holeData.reduce((a, h) => a + h.penalties, 0)
 
     await supabase.from('rounds').update({
@@ -228,7 +270,11 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
     : holeData
 
   const thruScore = holeData.slice(0, currentHole).reduce((a, h) => a + (h.score || 0), 0)
-  const thruDiff  = holeData.slice(0, currentHole).reduce((a, h) => a + Math.max(0, (h.score || 0) - par), 0)
+  const thruPar   = courseHoles.slice(0, currentHole).reduce((a, h) => a + (h.par || 4), 0)
+  const thruDiff  = thruScore - thruPar
+
+  // Is the current score outside the grid (> 8 or very low)?
+  const scoreOutsideGrid = hole.score !== null && (hole.score > 8 || hole.score < par - 2)
 
   return (
     <View style={s.root}>
@@ -246,13 +292,13 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
         </Text>
 
         <View style={s.holeBarRight}>
-          {currentHole > 0 && (
+          {currentHole > 0 && thruScore > 0 && (
             <>
               <Text style={s.holeBarThru}>THRU {currentHole}</Text>
-              <Text style={s.holeBarScore}>{thruScore || '—'}</Text>
+              <Text style={s.holeBarScore}>{thruScore}</Text>
               <View style={[s.holeBarDiff, thruDiff > 0 ? s.holeBarDiffOver : s.holeBarDiffUnder]}>
                 <Text style={[s.holeBarDiffText, { color: thruDiff > 0 ? C.errorRed : C.fairway }]}>
-                  {thruDiff > 0 ? `+${thruDiff}` : 'E'}
+                  {thruDiff === 0 ? 'E' : thruDiff > 0 ? `+${thruDiff}` : `${thruDiff}`}
                 </Text>
               </View>
             </>
@@ -268,12 +314,30 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
       </View>
 
       <ScrollView contentContainerStyle={s.holeContainer} showsVerticalScrollIndicator={false}>
-        {/* Hole number + par */}
+
+        {/* Hole number + par + yardage + stroke index */}
         <Animated.View style={[s.holeMeta, { transform: [{ translateX: slideAnim }] }]}>
           <View>
             <Text style={s.holeEyebrow}>HOLE</Text>
             <Text style={s.holeNumber}>{currentHole + 1}</Text>
           </View>
+
+          {/* Yardage + stroke index stacked to the right of hole number */}
+          <View style={s.holeStats}>
+            {yardage !== null && (
+              <View style={s.holeStat}>
+                <Text style={s.holeStatLabel}>YARDS</Text>
+                <Text style={s.holeStatValue}>{yardage}</Text>
+              </View>
+            )}
+            {strokeIndex !== null && (
+              <View style={s.holeStat}>
+                <Text style={s.holeStatLabel}>HDCP</Text>
+                <Text style={s.holeStatValue}>{strokeIndex}</Text>
+              </View>
+            )}
+          </View>
+
           <View style={s.holeParBadge}>
             <Text style={s.holeParText}>PAR {par}</Text>
           </View>
@@ -285,21 +349,40 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
           <Text style={s.fieldHint}>{hole.score} strokes · {getScoreLabel(hole.score, par).toLowerCase()}</Text>
         )}
         <View style={s.scoreGrid}>
-          {gridScores.map((score) => {
-            const isSelected = hole.score === score
-            const label = getScoreLabel(score, par)
-            const accentColor = scoreCellColor(score, par)
+          {gridScores.map((sc) => {
+            const isSelected = hole.score === sc && !scoreOutsideGrid
+            const label = getScoreLabel(sc, par)
+            const accentColor = scoreCellColor(sc, par)
             return (
               <TouchableOpacity
-                key={score}
+                key={sc}
                 style={[s.scoreCell, isSelected && { backgroundColor: accentColor, borderColor: accentColor }]}
-                onPress={() => updateHole('score', score)}
+                onPress={() => updateHole('score', sc)}
               >
-                <Text style={[s.scoreCellNum, isSelected && { color: C.onDark }]}>{score}</Text>
+                <Text style={[s.scoreCellNum, isSelected && { color: C.onDark }]}>{sc}</Text>
                 <Text style={[s.scoreCellLabel, isSelected && { color: C.onDarkMuted }]}>{label}</Text>
               </TouchableOpacity>
             )
           })}
+
+          {/* Custom score input cell */}
+          <View style={[
+            s.scoreCell,
+            s.scoreCellCustom,
+            scoreOutsideGrid && { borderColor: C.clay, backgroundColor: C.clay }
+          ]}>
+            <TextInput
+              style={[s.scoreCellCustomInput, scoreOutsideGrid && { color: C.onDark }]}
+              placeholder="9+"
+              placeholderTextColor={C.ink3}
+              keyboardType="numeric"
+              maxLength={2}
+              value={customScoreText}
+              onChangeText={handleCustomScore}
+              textAlign="center"
+            />
+            <Text style={[s.scoreCellLabel, scoreOutsideGrid && { color: C.onDarkMuted }]}>OTHER</Text>
+          </View>
         </View>
 
         {/* Putts */}
@@ -392,7 +475,8 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
               const hNum = isBack ? i + 10 : i + 1
               const isCurrent = hNum - 1 === currentHole
               const hasScore = h.score !== null
-              const diff = hasScore ? h.score! - par : 0
+              const holePar = courseHoles[hNum - 1]?.par ?? 4
+              const diff = hasScore ? h.score! - holePar : 0
               return (
                 <TouchableOpacity
                   key={hNum}
@@ -458,7 +542,6 @@ const s = StyleSheet.create({
   backText: { fontFamily: F.sansMedium, fontSize: 14, color: C.ink1 },
   eyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 6 },
   title: { fontFamily: F.serifBold, fontSize: 36, color: C.ink1, marginBottom: 20 },
-
   scoreCard: {
     backgroundColor: C.cardBg, borderRadius: 16, padding: 20,
     borderWidth: 1, borderColor: C.border, marginBottom: 20,
@@ -477,7 +560,6 @@ const s = StyleSheet.create({
     backgroundColor: C.fairwayDark, alignItems: 'center', justifyContent: 'center',
   },
   scoreBtnMinus: { backgroundColor: C.insetBg },
-
   detailsCard: {
     backgroundColor: C.cardBg, borderRadius: 16,
     borderWidth: 1, borderColor: C.border, overflow: 'hidden',
@@ -521,9 +603,24 @@ const s = StyleSheet.create({
   holeBarDiffText: { fontFamily: F.sansBold, fontSize: 11 },
 
   holeContainer: { padding: 20, paddingTop: 16 },
-  holeMeta: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 20 },
+
+  // Hole meta row — number, stats, par badge
+  holeMeta: {
+    flexDirection: 'row', alignItems: 'flex-end',
+    justifyContent: 'space-between', marginBottom: 20,
+  },
   holeEyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.5, color: C.ink3, marginBottom: 2 },
   holeNumber: { fontFamily: F.serifBold, fontSize: 72, color: C.ink1, lineHeight: 72 },
+
+  // Yardage + handicap stats
+  holeStats: {
+    flex: 1, flexDirection: 'row', gap: 16,
+    paddingLeft: 16, paddingBottom: 4, alignItems: 'flex-end',
+  },
+  holeStat: { alignItems: 'flex-start' },
+  holeStatLabel: { fontFamily: F.mono, fontSize: 9, letterSpacing: 1.2, color: C.ink3, marginBottom: 2 },
+  holeStatValue: { fontFamily: F.mono, fontSize: 14, color: C.ink2, fontWeight: '500' },
+
   holeParBadge: {
     backgroundColor: C.fairwayDark, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
   },
@@ -540,6 +637,13 @@ const s = StyleSheet.create({
   },
   scoreCellNum: { fontFamily: F.serifBold, fontSize: 24, color: C.ink1 },
   scoreCellLabel: { fontFamily: F.mono, fontSize: 8, color: C.ink3, letterSpacing: 0.5, marginTop: 4 },
+
+  // Custom score input cell
+  scoreCellCustom: { justifyContent: 'center' },
+  scoreCellCustomInput: {
+    fontFamily: F.serifBold, fontSize: 24, color: C.ink1,
+    width: '100%', textAlign: 'center', padding: 0,
+  },
 
   chipScroll: { marginHorizontal: -20 },
   chip: {
