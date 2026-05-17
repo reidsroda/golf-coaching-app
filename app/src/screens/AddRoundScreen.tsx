@@ -9,7 +9,22 @@ import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
 
-type Course = { id: string; name: string; city: string; state: string }
+type Course = {
+  id: string
+  name: string
+  course_name: string | null
+  city: string
+  state: string
+}
+
+// Grouped by club name for display
+type ClubResult = {
+  name: string
+  city: string
+  state: string
+  courses: Course[]
+}
+
 type TeeSet = {
   id: string; name: string; color: string | null; gender: string
   course_rating: number; slope_rating: number; total_yards: number; par_total: number
@@ -32,8 +47,9 @@ function getTeeColor(tee: TeeSet): string {
 
 export default function AddRoundScreen({ navigation }: any) {
   const [query, setQuery] = useState('')
-  const [courses, setCourses] = useState<Course[]>([])
+  const [clubs, setClubs] = useState<ClubResult[]>([])
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
+  const [selectedClub, setSelectedClub] = useState<ClubResult | null>(null)
   const [teeSets, setTeeSets] = useState<TeeSet[]>([])
   const [selectedTee, setSelectedTee] = useState<TeeSet | null>(null)
   const [holes, setHoles] = useState<9 | 18>(18)
@@ -43,30 +59,61 @@ export default function AddRoundScreen({ navigation }: any) {
 
   async function searchCourses(text: string) {
     setQuery(text)
-    if (text.length < 2) { setCourses([]); setShowDropdown(false); return }
+    setSelectedCourse(null)
+    setSelectedClub(null)
+    setTeeSets([])
+    setSelectedTee(null)
+    if (text.length < 2) { setClubs([]); setShowDropdown(false); return }
     setSearching(true)
+
     const { data } = await supabase
       .from('courses')
-      .select('id, name, city, state')
+      .select('id, name, course_name, city, state')
       .ilike('name', `%${text}%`)
-      .limit(8)
-    setCourses(data || [])
+      .limit(20)
+
+    // Group results by club name
+    const grouped = new Map<string, ClubResult>()
+    for (const c of (data || [])) {
+      const key = `${c.name}||${c.city}||${c.state}`
+      if (!grouped.has(key)) {
+        grouped.set(key, { name: c.name, city: c.city, state: c.state, courses: [] })
+      }
+      grouped.get(key)!.courses.push(c)
+    }
+
+    setClubs(Array.from(grouped.values()))
     setShowDropdown(true)
     setSearching(false)
   }
 
-  async function selectCourse(course: Course) {
-    setSelectedCourse(course)
-    setQuery(course.name)
+  async function selectClub(club: ClubResult) {
     setShowDropdown(false)
-    setCourses([])
+    setClubs([])
+
+    if (club.courses.length === 1) {
+      // Only one course under this club — go straight to tee selection
+      await selectCourse(club.courses[0], club)
+    } else {
+      // Multiple courses — show course picker
+      setSelectedClub(club)
+      setQuery(club.name)
+    }
+  }
+
+  async function selectCourse(course: Course, club?: ClubResult) {
+    setSelectedCourse(course)
+    setSelectedClub(club || selectedClub)
+    setQuery(club?.name || selectedClub?.name || course.name)
     setSelectedTee(null)
+
     const { data } = await supabase
       .from('tee_sets')
       .select('id, name, color, gender, course_rating, slope_rating, total_yards, par_total')
       .eq('course_id', course.id)
       .eq('gender', 'M')
       .order('total_yards', { ascending: false })
+
     setTeeSets(data || [])
     if (data && data.length > 0) setSelectedTee(data[0])
   }
@@ -81,17 +128,17 @@ export default function AddRoundScreen({ navigation }: any) {
       course_id: selectedCourse.id,
       course_name: selectedCourse.name,
       tee_set_id: selectedTee.id,
-      date: today,
-      holes,
+      date: today, holes,
       total_score: 0, total_putts: 0, fairways_hit: 0, gir: 0, penalties: 0,
     }).select().single()
     if (error || !data) return
-    navigation.navigate('EnterScores', { round: data, holes, tee: selectedTee, course: selectedCourse, mode: scoreMethod })
+    navigation.navigate('EnterScores', {
+      round: data, holes, tee: selectedTee, course: selectedCourse, mode: scoreMethod
+    })
   }
 
   const canStart = selectedCourse && selectedTee && scoreMethod
   const filteredTees = teeSets.filter(t => holes === 9 ? true : (t.total_yards || 0) > 2000)
-
   const today = new Date()
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()
 
@@ -112,7 +159,9 @@ export default function AddRoundScreen({ navigation }: any) {
         <View style={s.searchWrapper}>
           <View style={[s.searchBox, selectedCourse && s.searchBoxActive]}>
             {selectedCourse && selectedTee && (
-              <View style={[s.courseDot, { backgroundColor: getTeeColor(selectedTee) },
+              <View style={[
+                s.courseDot,
+                { backgroundColor: getTeeColor(selectedTee) },
                 getTeeColor(selectedTee) === C.teeWhite && s.courseDotLight
               ]} />
             )}
@@ -130,21 +179,67 @@ export default function AddRoundScreen({ navigation }: any) {
             }
           </View>
 
-          {showDropdown && courses.length > 0 && (
+          {/* Club dropdown */}
+          {showDropdown && clubs.length > 0 && (
             <View style={s.dropdown}>
-              {courses.map((c, i) => (
+              {clubs.map((club, i) => (
                 <TouchableOpacity
-                  key={c.id}
-                  style={[s.dropdownItem, i < courses.length - 1 && s.dropdownBorder]}
-                  onPress={() => selectCourse(c)}
+                  key={`${club.name}-${i}`}
+                  style={[s.dropdownItem, i < clubs.length - 1 && s.dropdownBorder]}
+                  onPress={() => selectClub(club)}
                 >
-                  <Text style={s.dropdownName}>{c.name}</Text>
-                  <Text style={s.dropdownMeta}>{c.city}, {c.state}</Text>
+                  <View style={s.dropdownRow}>
+                    <View style={s.dropdownLeft}>
+                      <Text style={s.dropdownName}>{club.name}</Text>
+                      <Text style={s.dropdownMeta}>{club.city}, {club.state}</Text>
+                    </View>
+                    {club.courses.length > 1 && (
+                      <View style={s.multiCourseBadge}>
+                        <Text style={s.multiCourseBadgeText}>{club.courses.length} courses</Text>
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
+
+        {/* Course picker — only shown when club has multiple courses */}
+        {selectedClub && selectedClub.courses.length > 1 && !selectedCourse && (
+          <>
+            <Text style={s.label}>WHICH COURSE?</Text>
+            <View style={s.coursePickerList}>
+              {selectedClub.courses.map((course, i) => (
+                <TouchableOpacity
+                  key={course.id}
+                  style={[
+                    s.coursePickerItem,
+                    i < selectedClub.courses.length - 1 && s.coursePickerBorder
+                  ]}
+                  onPress={() => selectCourse(course)}
+                >
+                  <Text style={s.coursePickerName}>
+                    {course.course_name || course.name}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={C.ink3} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Selected course name — shown when multi-course and one is picked */}
+        {selectedCourse && selectedClub && selectedClub.courses.length > 1 && (
+          <View style={s.selectedCourseRow}>
+            <Text style={s.selectedCourseName}>
+              {selectedCourse.course_name || selectedCourse.name}
+            </Text>
+            <TouchableOpacity onPress={() => { setSelectedCourse(null); setTeeSets([]); setSelectedTee(null) }}>
+              <Text style={s.changeCourse}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Tee selector */}
         {selectedCourse && filteredTees.length > 0 && (
@@ -157,13 +252,14 @@ export default function AddRoundScreen({ navigation }: any) {
                 </Text>
               )}
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            <ScrollView
+              horizontal showsHorizontalScrollIndicator={false}
               style={s.teeScroll} contentContainerStyle={s.teeScrollContent}
             >
               {filteredTees.map((tee) => {
                 const isSelected = selectedTee?.id === tee.id
                 const color = getTeeColor(tee)
-                const isLight = color === C.teeWhite || color === '#E9E2D0'
+                const isLight = color === C.teeWhite
                 return (
                   <TouchableOpacity
                     key={tee.id}
@@ -211,7 +307,6 @@ export default function AddRoundScreen({ navigation }: any) {
         {/* Score entry method */}
         <Text style={s.label}>HOW YOU'LL ENTER SCORES</Text>
         <View style={s.methodRow}>
-          {/* Total score card */}
           <TouchableOpacity
             style={[s.methodCard, scoreMethod === 'total' && s.methodCardActive]}
             onPress={() => setScoreMethod('total')}
@@ -225,7 +320,6 @@ export default function AddRoundScreen({ navigation }: any) {
             <Text style={s.methodSub}>Quick — just the{'\n'}final number</Text>
           </TouchableOpacity>
 
-          {/* Hole-by-hole card */}
           <TouchableOpacity
             style={[s.methodCard, scoreMethod === 'hole' && s.methodCardActive]}
             onPress={() => setScoreMethod('hole')}
@@ -267,7 +361,6 @@ const s = StyleSheet.create({
   eyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.4, color: C.ink3, marginBottom: 10 },
   title: { fontFamily: F.serifBold, fontSize: 38, color: C.ink1, lineHeight: 44 },
   titleItalic: { fontFamily: F.serifBoldItalic, fontSize: 38, color: C.ink1, lineHeight: 44, marginBottom: 32 },
-
   label: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 8, marginTop: 20 },
 
   // Search
@@ -284,14 +377,43 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: F.sans, fontSize: 15, color: C.ink1, padding: 0 },
   dropdown: {
     position: 'absolute', top: '100%', left: 0, right: 0,
-    backgroundColor: C.cardBg, borderRadius: 10, borderWidth: 1, borderColor: C.border,
-    marginTop: 4, zIndex: 20,
-    shadowColor: C.ink1, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 8,
+    backgroundColor: C.cardBg, borderRadius: 10,
+    borderWidth: 1, borderColor: C.border, marginTop: 4, zIndex: 20,
+    shadowColor: C.ink1, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 8,
   },
-  dropdownItem: { paddingHorizontal: 16, paddingVertical: 12 },
+  dropdownItem: { paddingHorizontal: 16, paddingVertical: 13 },
   dropdownBorder: { borderBottomWidth: 1, borderBottomColor: C.hairline },
+  dropdownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownLeft: { flex: 1 },
   dropdownName: { fontFamily: F.sansMedium, fontSize: 14, color: C.ink1 },
   dropdownMeta: { fontFamily: F.mono, fontSize: 11, color: C.ink3, marginTop: 2 },
+  multiCourseBadge: {
+    backgroundColor: C.insetBg, borderRadius: 20,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: C.border, marginLeft: 8,
+  },
+  multiCourseBadgeText: { fontFamily: F.mono, fontSize: 10, color: C.ink2 },
+
+  // Course picker (multi-course clubs)
+  coursePickerList: {
+    backgroundColor: C.cardBg, borderRadius: 10,
+    borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+  },
+  coursePickerItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 16,
+  },
+  coursePickerBorder: { borderBottomWidth: 1, borderBottomColor: C.hairline },
+  coursePickerName: { fontFamily: F.sansMedium, fontSize: 15, color: C.ink1 },
+
+  // Selected course indicator
+  selectedCourseRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 12, paddingHorizontal: 2,
+  },
+  selectedCourseName: { fontFamily: F.sansSemiBold, fontSize: 14, color: C.ink1 },
+  changeCourse: { fontFamily: F.sansMedium, fontSize: 13, color: C.fairway },
 
   // Tees
   teeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 8 },
@@ -336,9 +458,7 @@ const s = StyleSheet.create({
   },
   methodCardActive: { borderColor: C.fairway, backgroundColor: C.insetBg },
   methodCheck: { position: 'absolute', top: 10, right: 10 },
-  methodNumber: {
-    fontFamily: F.serifBold, fontSize: 40, color: C.ink1, lineHeight: 46, marginBottom: 10,
-  },
+  methodNumber: { fontFamily: F.serifBold, fontSize: 40, color: C.ink1, lineHeight: 46, marginBottom: 10 },
   methodDots: { flexDirection: 'row', gap: 4, marginBottom: 10, marginTop: 6 },
   methodDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.bunker },
   methodDotFilled: { backgroundColor: C.fairway },
