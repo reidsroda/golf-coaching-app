@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Animated, Dimensions, TextInput
+  ScrollView, Animated, Dimensions, TextInput,
+  ImageBackground, Image
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
+const TOPO_BG = require('../../assets/TopographicBackground.png')
+const CARD_IMAGE = require('../../assets/CardImage.jpg')
 
 type HoleData = {
   score: number | null
@@ -60,11 +63,13 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
     total_score: 0, total_putts: 0, fairways_hit: 0,
     gir: 0, penalties: 0, birdies: 0, doubles: 0,
   })
+  const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const par = tee?.par_total || 72
 
-  function update(field: keyof RoundSummary, delta: number) {
-    setSummary(prev => ({ ...prev, [field]: Math.max(0, (prev[field] as number) + delta) }))
+  function setField(field: keyof RoundSummary, text: string) {
+    const val = parseInt(text)
+    setSummary(prev => ({ ...prev, [field]: isNaN(val) ? 0 : Math.max(0, val) }))
   }
 
   async function handleSave() {
@@ -81,8 +86,9 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
   }
 
   const diff = summary.total_score - par
-  const diffStr = diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `${diff}`
+  const diffStr = diff === 0 ? 'E' : diff > 0 ? `+${Math.abs(diff)} OVER` : `-${Math.abs(diff)} UNDER`
   const isOver = diff > 0
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
 
   const summaryFields: { key: keyof RoundSummary; label: string; sub: string }[] = [
     { key: 'total_putts',  label: 'Total Putts',         sub: 'incl. all greens' },
@@ -93,67 +99,89 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
     { key: 'doubles',      label: 'Double Bogey +',       sub: 'or worse' },
   ]
 
-  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
-
   return (
-    <View style={s.root}>
+    <ImageBackground source={TOPO_BG} style={s.root} imageStyle={s.topoBg}>
       <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity onPress={onBack} style={s.backRow}>
-          <Ionicons name="chevron-back" size={18} color={C.ink1} />
-          <Text style={s.backText}>New round</Text>
-        </TouchableOpacity>
 
-        <Text style={s.eyebrow}>
-          {course?.name?.toUpperCase()} · {tee?.name?.toUpperCase()} TEES · {dateStr}
-        </Text>
-        <Text style={s.title}>Final tally</Text>
+        {/* Nav */}
+        <View style={s.navBar}>
+          <TouchableOpacity onPress={onBack} style={s.navBack}>
+            <Ionicons name="chevron-back" size={20} color={C.ink1} />
+          </TouchableOpacity>
+          <Text style={s.navTitle}>New round</Text>
+          <Text style={s.navStep}>1/2</Text>
+        </View>
 
-        <View style={s.scoreCard}>
-          <Text style={s.scoreCardLabel}>TOTAL SCORE</Text>
-          <View style={s.scoreRow}>
-            <Text style={[s.scoreBig,
-              summary.total_score > 0 && isOver && { color: C.errorRed },
-              summary.total_score > 0 && !isOver && { color: C.fairway }
-            ]}>
-              {summary.total_score || '—'}
+        <View style={s.eyebrowRow}>
+          <View style={[s.teeDot, { backgroundColor: C.teeBlue }]} />
+          <Text style={s.eyebrow}>
+            {course?.name?.toUpperCase()} · {tee?.name?.toUpperCase()} TEES · {dateStr}
+          </Text>
+        </View>
+        <Text style={s.titleTotal}>Final tally</Text>
+
+        {/* Hero card — brighter image, less overlay */}
+        <View style={s.heroCard}>
+          <Image source={CARD_IMAGE} style={s.heroCardBg} resizeMode="cover" />
+          <View style={s.heroCardOverlay} />
+          <View style={s.heroCardContent}>
+            <Text style={s.heroCardLabel}>FINAL TALLY</Text>
+            <Text style={s.heroCardCourse}>{course?.name}</Text>
+            <Text style={s.heroCardMeta}>
+              {tee?.name?.toUpperCase()} TEES · PAR {par}
             </Text>
-            {summary.total_score > 0 && (
-              <View style={[s.diffPill, isOver ? s.diffPillOver : s.diffPillUnder]}>
-                <Text style={[s.diffText, { color: isOver ? C.errorRed : C.fairway }]}>{diffStr}</Text>
-              </View>
+            {editing ? (
+              <TextInput
+                style={s.heroScoreInput}
+                keyboardType="numeric"
+                maxLength={3}
+                value={summary.total_score > 0 ? String(summary.total_score) : ''}
+                onChangeText={t => setField('total_score', t)}
+                onBlur={() => setEditing(false)}
+                autoFocus
+                placeholderTextColor="rgba(241,236,224,0.4)"
+                placeholder="72"
+                selectionColor={C.onDark}
+              />
+            ) : (
+              <Text style={s.heroScore}>
+                {summary.total_score > 0 ? summary.total_score : '—'}
+              </Text>
             )}
-          </View>
-          <Text style={s.scoreVsPar}>vs par {par}</Text>
-          <View style={s.scoreControls}>
-            <TouchableOpacity style={s.scoreBtn} onPress={() => update('total_score', 1)}>
-              <Ionicons name="add" size={22} color={C.onDark} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.scoreBtn, s.scoreBtnMinus]} onPress={() => update('total_score', -1)}>
-              <Ionicons name="remove" size={22} color={C.ink1} />
+            <TouchableOpacity style={s.heroRow} onPress={() => setEditing(true)}>
+              {summary.total_score > 0 && (
+                <View style={[s.heroPill, isOver ? s.heroPillOver : s.heroPillUnder]}>
+                  <Text style={s.heroPillText}>{diffStr}</Text>
+                </View>
+              )}
+              <Text style={s.heroTapEdit}>TAP TO EDIT</Text>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* Round details — text input version */}
+        <View style={s.detailsHeaderRow}>
+          <Text style={s.detailsLabel}>ROUND DETAILS</Text>
+          <Text style={s.detailsOptional}>All optional</Text>
+        </View>
+
         <View style={s.detailsCard}>
-          <View style={s.detailsHeader}>
-            <Text style={s.detailsTitle}>ROUND DETAILS</Text>
-            <Text style={s.detailsOptional}>All optional</Text>
-          </View>
-          {summaryFields.map(({ key, label, sub }) => (
-            <View key={key} style={s.detailRow}>
-              <View>
+          {summaryFields.map(({ key, label, sub }, i) => (
+            <View key={key} style={[s.detailRow, i < summaryFields.length - 1 && s.detailRowBorder]}>
+              <View style={s.detailLeft}>
                 <Text style={s.detailLabel}>{label}</Text>
                 <Text style={s.detailSub}>{sub}</Text>
               </View>
-              <View style={s.detailControls}>
-                <Text style={s.detailValue}>{summary[key]}</Text>
-                <TouchableOpacity style={s.detailBtn} onPress={() => update(key, -1)}>
-                  <Ionicons name="remove" size={15} color={C.ink1} />
-                </TouchableOpacity>
-                <TouchableOpacity style={[s.detailBtn, s.detailBtnPlus]} onPress={() => update(key, 1)}>
-                  <Ionicons name="add" size={15} color={C.onDark} />
-                </TouchableOpacity>
-              </View>
+              <TextInput
+                style={s.detailInput}
+                keyboardType="numeric"
+                maxLength={3}
+                value={summary[key] > 0 ? String(summary[key]) : ''}
+                onChangeText={t => setField(key, t)}
+                placeholder="0"
+                placeholderTextColor={C.ink3}
+                textAlign="right"
+              />
             </View>
           ))}
         </View>
@@ -167,7 +195,7 @@ function TotalScoreMode({ round, tee, course, holes, onSave, onBack }: any) {
           <Text style={s.saveBtnText}>{loading ? 'Saving…' : 'Save round'}</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ImageBackground>
   )
 }
 
@@ -185,7 +213,6 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
   const [customScoreText, setCustomScoreText] = useState('')
   const slideAnim = useRef(new Animated.Value(0)).current
 
-  // Load real hole data from Supabase
   useEffect(() => {
     async function loadHoles() {
       if (!tee?.id) return
@@ -235,62 +262,48 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
     }
   }
 
-  // Score grid: par-2 up to 8, then custom input
-  const gridScores = Array.from({ length: 7 }, (_, i) => par - 2 + i)
-    .filter(sc => sc > 0 && sc <= 8)
+  const gridScores = Array.from({ length: 7 }, (_, i) => par - 2 + i).filter(sc => sc > 0 && sc <= 8)
+  const scoreOutsideGrid = hole.score !== null && (hole.score > 8 || hole.score < par - 2)
 
   async function handleFinish() {
     setLoading(true)
     const holeRows = holeData.map((h, i) => ({
       round_id: round.id, hole_number: i + 1,
       score: h.score || 0, putts: h.putts || 0,
-      fairway_hit: h.fairway_hit ?? false, gir: h.gir ?? false,
-      penalties: h.penalties || 0,
+      fairway_hit: h.fairway_hit ?? false, gir: h.gir ?? false, penalties: h.penalties || 0,
     }))
     await supabase.from('holes').insert(holeRows)
-
     const totalScore     = holeData.reduce((a, h) => a + (h.score || 0), 0)
     const totalPutts     = holeData.reduce((a, h) => a + (h.putts || 0), 0)
     const fairwaysHit    = holeData.filter(h => h.fairway_hit).length
     const girCount       = holeData.filter(h => h.gir).length
     const totalPenalties = holeData.reduce((a, h) => a + h.penalties, 0)
-
     await supabase.from('rounds').update({
       total_score: totalScore, total_putts: totalPutts,
       fairways_hit: fairwaysHit, gir: girCount, penalties: totalPenalties,
     }).eq('id', round.id)
-
     setLoading(false)
     onSave({ ...round, total_score: totalScore, total_putts: totalPutts, fairways_hit: fairwaysHit, gir: girCount, penalties: totalPenalties })
   }
 
   const isBack = currentHole >= 9
-  const miniHoles = holeCount === 18
-    ? (isBack ? holeData.slice(9) : holeData.slice(0, 9))
-    : holeData
-
+  const miniHoles = holeCount === 18 ? (isBack ? holeData.slice(9) : holeData.slice(0, 9)) : holeData
   const thruScore = holeData.slice(0, currentHole).reduce((a, h) => a + (h.score || 0), 0)
   const thruPar   = courseHoles.slice(0, currentHole).reduce((a, h) => a + (h.par || 4), 0)
   const thruDiff  = thruScore - thruPar
 
-  // Is the current score outside the grid (> 8 or very low)?
-  const scoreOutsideGrid = hole.score !== null && (hole.score > 8 || hole.score < par - 2)
+  const SIDE_PAD = 20
 
   return (
-    <View style={s.root}>
+    <ImageBackground source={TOPO_BG} style={s.root} imageStyle={s.topoBg}>
       {/* Top bar */}
       <View style={s.holeBar}>
-        <TouchableOpacity
-          style={s.holeBarBtn}
-          onPress={() => currentHole > 0 ? goToHole(currentHole - 1) : onBack()}
-        >
+        <TouchableOpacity style={s.holeBarBtn} onPress={() => currentHole > 0 ? goToHole(currentHole - 1) : onBack()}>
           <Ionicons name="chevron-back" size={20} color={C.ink1} />
         </TouchableOpacity>
-
         <Text style={s.holeBarCourse} numberOfLines={1}>
           {course?.name?.toUpperCase()} · {tee?.name?.toUpperCase()}
         </Text>
-
         <View style={s.holeBarRight}>
           {currentHole > 0 && thruScore > 0 && (
             <>
@@ -304,25 +317,19 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
             </>
           )}
         </View>
-
-        <TouchableOpacity
-          style={s.holeBarBtn}
-          onPress={() => currentHole < holeCount - 1 && goToHole(currentHole + 1)}
-        >
+        <TouchableOpacity style={s.holeBarBtn} onPress={() => currentHole < holeCount - 1 && goToHole(currentHole + 1)}>
           <Ionicons name="chevron-forward" size={20} color={currentHole < holeCount - 1 ? C.ink1 : C.hairline} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={s.holeContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.holeContainer, { paddingHorizontal: SIDE_PAD }]} showsVerticalScrollIndicator={false}>
 
-        {/* Hole number + par + yardage + stroke index */}
+        {/* Hole number + par */}
         <Animated.View style={[s.holeMeta, { transform: [{ translateX: slideAnim }] }]}>
           <View>
             <Text style={s.holeEyebrow}>HOLE</Text>
             <Text style={s.holeNumber}>{currentHole + 1}</Text>
           </View>
-
-          {/* Yardage + stroke index stacked to the right of hole number */}
           <View style={s.holeStats}>
             {yardage !== null && (
               <View style={s.holeStat}>
@@ -337,21 +344,19 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
               </View>
             )}
           </View>
-
           <View style={s.holeParBadge}>
             <Text style={s.holeParText}>PAR {par}</Text>
           </View>
         </Animated.View>
 
-        {/* Score grid */}
-        <Text style={s.fieldLabel}>SCORE</Text>
+        {/* ── SCORE ── */}
+        <Text style={s.sectionLabel}>SCORE</Text>
         {hole.score !== null && (
-          <Text style={s.fieldHint}>{hole.score} strokes · {getScoreLabel(hole.score, par).toLowerCase()}</Text>
+          <Text style={s.sectionHint}>{hole.score} strokes · {getScoreLabel(hole.score, par).toLowerCase()}</Text>
         )}
         <View style={s.scoreGrid}>
           {gridScores.map((sc) => {
             const isSelected = hole.score === sc && !scoreOutsideGrid
-            const label = getScoreLabel(sc, par)
             const accentColor = scoreCellColor(sc, par)
             return (
               <TouchableOpacity
@@ -360,17 +365,13 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
                 onPress={() => updateHole('score', sc)}
               >
                 <Text style={[s.scoreCellNum, isSelected && { color: C.onDark }]}>{sc}</Text>
-                <Text style={[s.scoreCellLabel, isSelected && { color: C.onDarkMuted }]}>{label}</Text>
+                <Text style={[s.scoreCellLabel, isSelected && { color: C.onDarkMuted }]}>
+                  {getScoreLabel(sc, par)}
+                </Text>
               </TouchableOpacity>
             )
           })}
-
-          {/* Custom score input cell */}
-          <View style={[
-            s.scoreCell,
-            s.scoreCellCustom,
-            scoreOutsideGrid && { borderColor: C.clay, backgroundColor: C.clay }
-          ]}>
+          <View style={[s.scoreCell, s.scoreCellCustom, scoreOutsideGrid && { borderColor: C.clay, backgroundColor: C.clay }]}>
             <TextInput
               style={[s.scoreCellCustomInput, scoreOutsideGrid && { color: C.onDark }]}
               placeholder="9+"
@@ -385,24 +386,24 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
           </View>
         </View>
 
-        {/* Putts */}
-        <Text style={s.fieldLabel}>PUTTS</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll}>
+        {/* ── PUTTS ── */}
+        <Text style={s.sectionLabel}>PUTTS</Text>
+        <View style={s.chipRow}>
           {[0, 1, 2, 3, 4, 5].map((p) => (
             <TouchableOpacity
               key={p}
-              style={[s.chip, hole.putts === p && s.chipActive]}
+              style={[s.chip, { flex: 1 }, hole.putts === p && s.chipActive]}
               onPress={() => updateHole('putts', p)}
             >
               <Text style={[s.chipText, hole.putts === p && s.chipTextActive]}>{p}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </View>
 
-        {/* Fairway + GIR */}
+        {/* ── FAIRWAY + GIR ── */}
         <View style={s.twoCol}>
           <View style={s.twoColItem}>
-            <Text style={s.fieldLabel}>FAIRWAY</Text>
+            <Text style={s.sectionLabel}>FAIRWAY</Text>
             {par === 3 ? (
               <Text style={s.naText}>Par 3 — n/a</Text>
             ) : (
@@ -410,47 +411,38 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
                 {[{ val: true, label: 'Hit' }, { val: false, label: 'Miss' }].map(({ val, label }) => (
                   <TouchableOpacity
                     key={label}
-                    style={[s.toggleBtn,
-                      hole.fairway_hit === val && (val ? s.toggleBtnGreen : s.toggleBtnRed)
-                    ]}
+                    style={[s.toggleBtn, hole.fairway_hit === val && (val ? s.toggleBtnGreen : s.toggleBtnRed)]}
                     onPress={() => updateHole('fairway_hit', val)}
                   >
-                    <Text style={[s.toggleBtnText, hole.fairway_hit === val && s.toggleBtnTextActive]}>
-                      {label}
-                    </Text>
+                    <Text style={[s.toggleBtnText, hole.fairway_hit === val && s.toggleBtnTextActive]}>{label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
           </View>
-
           <View style={s.twoColItem}>
-            <Text style={s.fieldLabel}>GREEN IN REG</Text>
+            <Text style={s.sectionLabel}>GREEN IN REG</Text>
             <View style={s.toggleRow}>
               {[{ val: true, label: 'Hit' }, { val: false, label: 'Miss' }].map(({ val, label }) => (
                 <TouchableOpacity
                   key={label}
-                  style={[s.toggleBtn,
-                    hole.gir === val && (val ? s.toggleBtnGreen : s.toggleBtnRed)
-                  ]}
+                  style={[s.toggleBtn, hole.gir === val && (val ? s.toggleBtnGreen : s.toggleBtnRed)]}
                   onPress={() => updateHole('gir', val)}
                 >
-                  <Text style={[s.toggleBtnText, hole.gir === val && s.toggleBtnTextActive]}>
-                    {label}
-                  </Text>
+                  <Text style={[s.toggleBtnText, hole.gir === val && s.toggleBtnTextActive]}>{label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
         </View>
 
-        {/* Penalties */}
-        <Text style={s.fieldLabel}>PENALTY STROKES</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll}>
+        {/* ── PENALTY STROKES ── */}
+        <Text style={s.sectionLabel}>PENALTY STROKES</Text>
+        <View style={s.chipRow}>
           {[0, 1, 2, 3, 4].map((p) => (
             <TouchableOpacity
               key={p}
-              style={[s.chip, hole.penalties === p && s.chipPenaltyActive]}
+              style={[s.chip, { flex: 1 }, hole.penalties === p && s.chipPenaltyActive]}
               onPress={() => updateHole('penalties', p)}
             >
               <Text style={[s.chipText, hole.penalties === p && s.chipTextActive]}>
@@ -458,9 +450,9 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
               </Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </View>
 
-        {/* Mini scorecard */}
+        {/* ── SCORECARD ── */}
         <View style={s.miniCard}>
           <View style={s.miniHeader}>
             <Text style={s.miniTitle}>
@@ -485,8 +477,7 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
                 >
                   <Text style={[s.miniNum, isCurrent && s.miniNumActive]}>{hNum}</Text>
                   <Text style={[
-                    s.miniScore,
-                    isCurrent && s.miniNumActive,
+                    s.miniScore, isCurrent && s.miniNumActive,
                     hasScore && diff >= 2 && { color: C.errorRed },
                     hasScore && diff === 1 && { color: C.flagYellow },
                     hasScore && diff <= -1 && { color: C.fairway },
@@ -513,20 +504,17 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ImageBackground>
   )
 }
 
 // ─── Main export ──────────────────────────────────────────────
 export default function EnterScoresScreen({ route, navigation }: any) {
   const { round, holes, tee, course, mode } = route.params
-
   function handleSave(updatedRound: any) {
     navigation.navigate('RoundSummary', { round: updatedRound, tee, course, holes })
   }
-
   function handleBack() { navigation.goBack() }
-
   if (mode === 'total') {
     return <TotalScoreMode round={round} tee={tee} course={course} holes={holes} onSave={handleSave} onBack={handleBack} />
   }
@@ -535,62 +523,71 @@ export default function EnterScoresScreen({ route, navigation }: any) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.pageBg },
+  topoBg: { opacity: 0.55, resizeMode: 'cover' },
 
   // Total score mode
-  container: { padding: 24, paddingTop: 16 },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 24, marginTop: 8 },
-  backText: { fontFamily: F.sansMedium, fontSize: 14, color: C.ink1 },
-  eyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 6 },
-  title: { fontFamily: F.serifBold, fontSize: 36, color: C.ink1, marginBottom: 20 },
-  scoreCard: {
-    backgroundColor: C.cardBg, borderRadius: 16, padding: 20,
-    borderWidth: 1, borderColor: C.border, marginBottom: 20,
+  container: { paddingBottom: 24 },
+  navBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12,
   },
-  scoreCardLabel: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 8 },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 4 },
-  scoreBig: { fontFamily: F.serifBold, fontSize: 72, color: C.ink1, lineHeight: 80 },
-  diffPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  diffPillOver: { backgroundColor: '#FBE8E6' },
-  diffPillUnder: { backgroundColor: '#E6F4EC' },
-  diffText: { fontFamily: F.sansBold, fontSize: 15 },
-  scoreVsPar: { fontFamily: F.mono, fontSize: 12, color: C.ink3, marginBottom: 16 },
-  scoreControls: { flexDirection: 'row', gap: 8 },
-  scoreBtn: {
-    width: 44, height: 44, borderRadius: 10,
-    backgroundColor: C.fairwayDark, alignItems: 'center', justifyContent: 'center',
+  navBack: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  navTitle: { fontFamily: F.sansSemiBold, fontSize: 15, color: C.ink1 },
+  navStep: { fontFamily: F.mono, fontSize: 12, color: C.ink3 },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginBottom: 4 },
+  teeDot: { width: 10, height: 10, borderRadius: 5 },
+  eyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.ink2 },
+  titleTotal: { fontFamily: F.serifBold, fontSize: 36, color: C.ink1, paddingHorizontal: 20, marginBottom: 20 },
+
+  // Hero card — reduced overlay opacity for brighter image
+  heroCard: { marginHorizontal: 20, borderRadius: 16, overflow: 'hidden', height: 220, marginBottom: 28 },
+  heroCardBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+  heroCardOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(20,50,30,0.50)' },
+  heroCardContent: { flex: 1, padding: 20, justifyContent: 'space-between' },
+  heroCardLabel: { fontFamily: F.mono, fontSize: 9, letterSpacing: 1.5, color: C.onDarkMuted },
+  heroCardCourse: { fontFamily: F.serifBoldItalic, fontSize: 22, color: C.onDark, lineHeight: 26 },
+  heroCardMeta: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.onDarkMuted, marginTop: 2 },
+  heroScore: { fontFamily: F.serifBold, fontSize: 80, color: C.onDark, lineHeight: 86 },
+  heroScoreInput: { fontFamily: F.serifBold, fontSize: 80, color: C.onDark, lineHeight: 86, padding: 0, margin: 0 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  heroPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  heroPillOver: { backgroundColor: C.errorRed },
+  heroPillUnder: { backgroundColor: C.fairway },
+  heroPillText: { fontFamily: F.sansBold, fontSize: 12, color: C.onDark, letterSpacing: 0.5 },
+  heroTapEdit: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.onDarkMuted },
+
+  // Details — text input style
+  detailsHeaderRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline',
+    paddingHorizontal: 20, marginBottom: 12,
   },
-  scoreBtnMinus: { backgroundColor: C.insetBg },
+  detailsLabel: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3 },
+  detailsOptional: { fontFamily: F.sans, fontSize: 12, color: C.ink3, fontStyle: 'italic' },
   detailsCard: {
-    backgroundColor: C.cardBg, borderRadius: 16,
+    marginHorizontal: 20, backgroundColor: C.cardBg, borderRadius: 16,
     borderWidth: 1, borderColor: C.border, overflow: 'hidden',
   },
-  detailsHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.hairline,
-  },
-  detailsTitle: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3 },
-  detailsOptional: { fontFamily: F.sans, fontSize: 12, color: C.ink3, fontStyle: 'italic' },
   detailRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.hairline,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
   },
+  detailRowBorder: { borderBottomWidth: 1, borderBottomColor: C.hairline },
+  detailLeft: { flex: 1 },
   detailLabel: { fontFamily: F.sansMedium, fontSize: 15, color: C.ink1 },
   detailSub: { fontFamily: F.mono, fontSize: 11, color: C.ink3, marginTop: 2 },
-  detailControls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  detailValue: { fontFamily: F.serifBold, fontSize: 20, color: C.ink1, minWidth: 28, textAlign: 'center' },
-  detailBtn: {
-    width: 32, height: 32, borderRadius: 8,
-    backgroundColor: C.insetBg, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: C.border,
+  detailInput: {
+    fontFamily: F.serifBold, fontSize: 20, color: C.ink1,
+    minWidth: 52, textAlign: 'right',
+    paddingVertical: 4, paddingHorizontal: 8,
+    borderBottomWidth: 1.5, borderBottomColor: C.border,
   },
-  detailBtnPlus: { backgroundColor: C.fairwayDark, borderColor: C.fairwayDark },
-  nudge: { fontFamily: F.sans, textAlign: 'center', fontSize: 13, color: C.ink3, fontStyle: 'italic', marginTop: 24 },
+  nudge: { fontFamily: F.sans, textAlign: 'center', fontSize: 13, color: C.ink3, fontStyle: 'italic', marginTop: 24, paddingHorizontal: 20 },
 
-  // Hole-by-hole
+  // Hole by hole
   holeBar: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingTop: 60, paddingBottom: 12,
-    backgroundColor: C.pageBg, borderBottomWidth: 1, borderBottomColor: C.hairline,
+    borderBottomWidth: 1, borderBottomColor: C.hairline,
   },
   holeBarBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   holeBarCourse: { flex: 1, fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.ink3, textAlign: 'center' },
@@ -602,66 +599,52 @@ const s = StyleSheet.create({
   holeBarDiffUnder: { backgroundColor: '#E6F4EC' },
   holeBarDiffText: { fontFamily: F.sansBold, fontSize: 11 },
 
-  holeContainer: { padding: 20, paddingTop: 16 },
-
-  // Hole meta row — number, stats, par badge
-  holeMeta: {
-    flexDirection: 'row', alignItems: 'flex-end',
-    justifyContent: 'space-between', marginBottom: 20,
-  },
+  holeContainer: { paddingTop: 16, paddingBottom: 16 },
+  holeMeta: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 },
   holeEyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.5, color: C.ink3, marginBottom: 2 },
   holeNumber: { fontFamily: F.serifBold, fontSize: 72, color: C.ink1, lineHeight: 72 },
-
-  // Yardage + handicap stats
-  holeStats: {
-    flex: 1, flexDirection: 'row', gap: 16,
-    paddingLeft: 16, paddingBottom: 4, alignItems: 'flex-end',
-  },
+  holeStats: { flex: 1, flexDirection: 'row', gap: 16, paddingLeft: 16, paddingBottom: 4, alignItems: 'flex-end' },
   holeStat: { alignItems: 'flex-start' },
   holeStatLabel: { fontFamily: F.mono, fontSize: 9, letterSpacing: 1.2, color: C.ink3, marginBottom: 2 },
-  holeStatValue: { fontFamily: F.mono, fontSize: 14, color: C.ink2, fontWeight: '500' },
-
-  holeParBadge: {
-    backgroundColor: C.fairwayDark, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10,
-  },
+  holeStatValue: { fontFamily: F.mono, fontSize: 14, color: C.ink2 },
+  holeParBadge: { backgroundColor: C.fairwayDark, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   holeParText: { fontFamily: F.sansBold, fontSize: 16, color: C.onDark, letterSpacing: 0.5 },
 
-  fieldLabel: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 10, marginTop: 20 },
-  fieldHint: { fontFamily: F.sans, fontSize: 12, color: C.ink2, marginBottom: 8, marginTop: -6, fontStyle: 'italic' },
+  // Section labels for hole-by-hole
+  sectionLabel: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 10, marginTop: 20 },
+  sectionHint: { fontFamily: F.sans, fontSize: 12, color: C.ink2, marginBottom: 8, marginTop: -6, fontStyle: 'italic' },
 
-  scoreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // Score grid — full width with equal cells
+  scoreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   scoreCell: {
-    width: (width - 40 - 24) / 4,
+    width: (width - 40 - 18) / 4,
     backgroundColor: C.cardBg, borderRadius: 10, paddingVertical: 14,
     alignItems: 'center', borderWidth: 1.5, borderColor: C.border,
   },
   scoreCellNum: { fontFamily: F.serifBold, fontSize: 24, color: C.ink1 },
   scoreCellLabel: { fontFamily: F.mono, fontSize: 8, color: C.ink3, letterSpacing: 0.5, marginTop: 4 },
-
-  // Custom score input cell
   scoreCellCustom: { justifyContent: 'center' },
-  scoreCellCustomInput: {
-    fontFamily: F.serifBold, fontSize: 24, color: C.ink1,
-    width: '100%', textAlign: 'center', padding: 0,
-  },
+  scoreCellCustomInput: { fontFamily: F.serifBold, fontSize: 22, color: C.ink1, width: '100%', textAlign: 'center', padding: 0 },
 
-  chipScroll: { marginHorizontal: -20 },
+  // Chips — full width row
+  chipRow: { flexDirection: 'row', gap: 6 },
   chip: {
-    width: 52, height: 52, borderRadius: 10, backgroundColor: C.cardBg,
+    height: 52, borderRadius: 10, backgroundColor: C.cardBg,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: C.border, marginLeft: 8,
+    borderWidth: 1.5, borderColor: C.border,
   },
   chipActive: { backgroundColor: C.fairwayDark, borderColor: C.fairwayDark },
   chipPenaltyActive: { backgroundColor: C.clay, borderColor: C.clay },
   chipText: { fontFamily: F.serifBold, fontSize: 18, color: C.ink1 },
   chipTextActive: { color: C.onDark },
 
-  twoCol: { flexDirection: 'row', gap: 20, marginTop: 4 },
+  // Fairway / GIR
+  twoCol: { flexDirection: 'row', gap: 16, marginTop: 4 },
   twoColItem: { flex: 1 },
   naText: { fontFamily: F.sans, fontSize: 13, color: C.ink3, fontStyle: 'italic', marginTop: 6 },
   toggleRow: { flexDirection: 'row', gap: 8 },
   toggleBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center',
+    flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center',
     backgroundColor: C.cardBg, borderWidth: 1.5, borderColor: C.border,
   },
   toggleBtnGreen: { backgroundColor: C.fairway, borderColor: C.fairway },
@@ -669,6 +652,7 @@ const s = StyleSheet.create({
   toggleBtnText: { fontFamily: F.sansSemiBold, fontSize: 14, color: C.ink2 },
   toggleBtnTextActive: { color: C.onDark },
 
+  // Mini scorecard
   miniCard: {
     backgroundColor: C.cardBg, borderRadius: 12, padding: 16,
     borderWidth: 1, borderColor: C.border, marginTop: 24,
@@ -676,8 +660,8 @@ const s = StyleSheet.create({
   miniHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   miniTitle: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3 },
   miniPlayed: { fontFamily: F.mono, fontSize: 10, color: C.ink3 },
-  miniHoles: { flexDirection: 'row', gap: 4, flexWrap: 'wrap' },
-  miniHole: { alignItems: 'center', paddingHorizontal: 6, paddingVertical: 6, borderRadius: 8, minWidth: 28 },
+  miniHoles: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  miniHole: { flex: 1, minWidth: 28, alignItems: 'center', paddingVertical: 6, borderRadius: 8 },
   miniHoleCurrent: { backgroundColor: C.insetBg },
   miniNum: { fontFamily: F.mono, fontSize: 10, color: C.ink3 },
   miniNumActive: { color: C.ink1, fontFamily: F.monoBold },
@@ -685,8 +669,9 @@ const s = StyleSheet.create({
 
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 24, paddingBottom: 40, backgroundColor: C.pageBg,
+    padding: 24, paddingBottom: 40,
     borderTopWidth: 1, borderTopColor: C.hairline,
+    backgroundColor: 'rgba(241,236,224,0.92)',
   },
   saveBtn: { backgroundColor: C.fairwayDark, borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   saveBtnText: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.onDark, letterSpacing: 0.3 },
