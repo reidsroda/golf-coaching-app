@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Animated, Dimensions, TextInput,
@@ -6,11 +6,13 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
+import * as Location from 'expo-location'
 import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
 const TOPO_BG = require('../../assets/TopographicBackground.png')
 const CARD_IMAGE = require('../../assets/CardImage.jpg')
+
 
 type HoleData = {
   score: number | null
@@ -25,6 +27,8 @@ type CourseHole = {
   par: number
   yardage: number | null
   stroke_index: number | null
+  green_lat: number | null
+  green_lng: number | null
 }
 
 type RoundSummary = {
@@ -55,6 +59,20 @@ function scoreCellColor(score: number, par: number): string {
   if (diff === 0) return C.ink1
   if (diff === 1) return C.flagYellow
   return C.errorRed
+}
+
+// ─── Haversine distance (meters) ─────────────────────────────
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function metersToYards(m: number): number {
+  return Math.round(m * 1.09361)
 }
 
 // ─── Total Score Mode ─────────────────────────────────────────
@@ -211,21 +229,95 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
   const [courseHoles, setCourseHoles] = useState<CourseHole[]>([])
   const [loading, setLoading] = useState(false)
   const [customScoreText, setCustomScoreText] = useState('')
+  const [distanceYards, setDistanceYards] = useState<number | null>(null)
+  const [locationGranted, setLocationGranted] = useState(false)
+  const [locating, setLocating] = useState(false)
+  const locationSub = useRef<Location.LocationSubscription | null>(null)
+  const lastLocation = useRef<{ lat: number; lng: number } | null>(null)
+  const currentHoleRef = useRef(0)
+  const courseHolesRef = useRef<CourseHole[]>([])
   const slideAnim = useRef(new Animated.Value(0)).current
+  const blinkAnim = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
     async function loadHoles() {
       if (!tee?.id) return
       const { data } = await supabase
         .from('course_holes')
-        .select('hole_number, par, yardage, stroke_index')
+        .select('hole_number, par, yardage, stroke_index, green_lat, green_lng')
         .eq('tee_set_id', tee.id)
         .order('hole_number', { ascending: true })
         .limit(holeCount)
-      if (data && data.length > 0) setCourseHoles(data)
+      if (data && data.length > 0) {
+        setCourseHoles(data)
+        courseHolesRef.current = data
+      }
     }
     loadHoles()
   }, [tee?.id])
+
+  // Keep refs in sync so GPS callback always has latest values
+  useEffect(() => { currentHoleRef.current = currentHole }, [currentHole])
+  useEffect(() => { courseHolesRef.current = courseHoles }, [courseHoles])
+
+  // Recalculate using refs (no stale closure)
+  function recalcDistance(lat: number, lng: number) {
+    const hole = courseHolesRef.current[currentHoleRef.current]
+    const greenLat = hole?.green_lat
+    const greenLng = hole?.green_lng
+    if (greenLat && greenLng) {
+      const meters = haversineMeters(lat, lng, greenLat, greenLng)
+      setDistanceYards(metersToYards(meters))
+    }
+  }
+
+  // GPS subscription — updates every 3 seconds
+  useEffect(() => {
+    let active = true
+    async function startGPS() {
+      setLocating(true)
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') { setLocating(false); return }
+      setLocationGranted(true)
+      setLocating(false)
+      // Start blinking red dot
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+          Animated.timing(blinkAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      ).start()
+      locationSub.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 2 },
+        (loc) => {
+          if (!active) return
+          const { latitude, longitude } = loc.coords
+          lastLocation.current = { lat: latitude, lng: longitude }
+          recalcDistance(latitude, longitude)
+        }
+      )
+    }
+    startGPS()
+    return () => {
+      active = false
+      locationSub.current?.remove()
+    }
+  }, [])
+
+  // Recalc when hole data loads (fixes race condition)
+  useEffect(() => {
+    if (courseHoles.length > 0 && lastLocation.current) {
+      recalcDistance(lastLocation.current.lat, lastLocation.current.lng)
+    }
+  }, [courseHoles])
+
+  // Recalc when switching holes
+  useEffect(() => {
+    setDistanceYards(null)
+    if (courseHolesRef.current.length > 0 && lastLocation.current) {
+      recalcDistance(lastLocation.current.lat, lastLocation.current.lng)
+    }
+  }, [currentHole])
 
   const hole = holeData[currentHole]
   const courseHole = courseHoles[currentHole]
@@ -348,6 +440,25 @@ function HoleByHoleMode({ round, tee, course, holes, onSave, onBack }: any) {
             <Text style={s.holeParText}>PAR {par}</Text>
           </View>
         </Animated.View>
+
+        {/* Distance to pin */}
+        {locationGranted && (
+          <View style={s.distanceCard}>
+            <Animated.View style={[s.distanceDot, { opacity: blinkAnim }]} />
+            <View style={s.distanceTextWrap}>
+              {distanceYards !== null ? (
+                <>
+                  <Text style={s.distanceValue}>{distanceYards}</Text>
+                  <Text style={s.distanceUnit}> yds to pin</Text>
+                </>
+              ) : (
+                <Text style={s.distanceLocating}>
+                  {locating ? 'Getting location…' : 'Calculating…'}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* ── SCORE ── */}
         <Text style={s.sectionLabel}>SCORE</Text>
@@ -667,6 +778,22 @@ const s = StyleSheet.create({
   miniNumActive: { color: C.ink1, fontFamily: F.monoBold },
   miniScore: { fontFamily: F.sansSemiBold, fontSize: 13, color: C.ink1, marginTop: 2 },
 
+  distanceDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: C.errorRed,
+    marginRight: 2,
+  },
+  distanceCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.cardBg, borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: C.border,
+    marginBottom: 4, alignSelf: 'flex-start',
+  },
+  distanceTextWrap: { flexDirection: 'row', alignItems: 'baseline' },
+  distanceValue: { fontFamily: F.serifBold, fontSize: 22, color: C.ink1 },
+  distanceUnit: { fontFamily: F.mono, fontSize: 11, color: C.ink3, letterSpacing: 0.5 },
+  distanceLocating: { fontFamily: F.mono, fontSize: 11, color: C.ink3, fontStyle: 'italic' },
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     padding: 24, paddingBottom: 40,
