@@ -2,8 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ImageBackground }
 import { Ionicons } from '@expo/vector-icons'
 import { C, F } from '../theme'
 
-const TOPO_BG = require('../../assets/Topographic_Background.png')
-
+const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
 export default function RoundSummaryScreen({ route, navigation }: any) {
   const { round, tee, course, holes } = route.params
   const par = tee?.par_total || 72
