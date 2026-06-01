@@ -10,8 +10,8 @@ import * as Location from 'expo-location'
 import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
-const TOPO_BG = require('../../assets/TopographicBackground.png')
-const CARD_IMAGE = require('../../assets/CardImage.jpg')
+const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
+const CARD_IMAGE = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335687/CardImage_howewh.jpg' }
 
 
 type HoleData = {

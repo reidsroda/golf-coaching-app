@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
-const TOPO_BG = require('../../assets/TopographicBackground.png')
+const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
 
 // ─── Radar config ─────────────────────────────────────────────
 const CHART_SIZE = width - 80

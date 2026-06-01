@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
-const TOPO_BG = require('../../assets/TopographicBackground.png')
+const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
 
 type Course = { id: string; name: string; course_name: string | null; city: string; state: string }
 type ClubResult = { name: string; city: string; state: string; courses: Course[] }
@@ -170,8 +170,8 @@ function CalendarPicker({ selectedDate, onSelect, onClose }: {
             key={i}
             style={[
               cal.cell,
-              day != null && isSelected(day) && cal.cellSelected,
-              day != null && isToday(day) && !isSelected(day) && cal.cellToday,
+              day ? (isSelected(day) ? cal.cellSelected : undefined) : undefined,
+              day ? (!isSelected(day) && isToday(day) ? cal.cellToday : undefined) : undefined,
             ]}
             onPress={() => {
               if (!day || isFuture(day)) return
@@ -350,7 +350,7 @@ export default function AddRoundScreen({ navigation }: any) {
           <View style={[s.searchBox, selectedCourse && s.searchBoxActive]}>
             {selectedCourse && selectedTee && (
               <View style={[s.courseDot, { backgroundColor: getTeeColor(selectedTee) },
-                getTeeColor(selectedTee) === C.teeWhite && s.courseDotLight
+                getTeeColor(selectedTee) === C.teeWhite ? s.courseDotLight : null
               ]} />
             )}
             <TextInput
@@ -437,7 +437,7 @@ export default function AddRoundScreen({ navigation }: any) {
                 const color = getTeeColor(tee)
                 return (
                   <TouchableOpacity key={tee.id} style={[s.teeCard, isSelected && s.teeCardSelected]} onPress={() => setSelectedTee(tee)}>
-                    <View style={[s.teeDot, { backgroundColor: color }, color === C.teeWhite && s.teeDotLight]} />
+                    <View style={[s.teeDot, { backgroundColor: color }, color === C.teeWhite ? s.teeDotLight : null]} />
                     <Text style={[s.teeName, isSelected && s.teeNameSelected]}>{tee.name.split('/')[0]}</Text>
                     <Text style={s.teeYards}>{tee.total_yards?.toLocaleString()}</Text>
                   </TouchableOpacity>

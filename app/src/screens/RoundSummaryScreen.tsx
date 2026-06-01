@@ -1,6 +1,8 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ImageBackground } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { C, F } from '../theme'
+
+const TOPO_BG = require('../../assets/Topographic_Background.png')
 
 export default function RoundSummaryScreen({ route, navigation }: any) {
   const { round, tee, course, holes } = route.params
@@ -26,8 +28,7 @@ export default function RoundSummaryScreen({ route, navigation }: any) {
   ]
 
   return (
-    <View style={s.root}>
-      {/* Top bar */}
+    <ImageBackground source={TOPO_BG} style={s.root} imageStyle={s.topoBg}>
       <View style={s.topBar}>
         <TouchableOpacity onPress={() => navigation.navigate('Home')} style={s.backBtn}>
           <Ionicons name="chevron-back" size={20} color={C.ink1} />
@@ -37,13 +38,9 @@ export default function RoundSummaryScreen({ route, navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
-        {/* Course + date */}
-        <Text style={s.eyebrow}>
-          {course?.name?.toUpperCase()} · {tee?.name?.toUpperCase()} TEES
-        </Text>
+        <Text style={s.eyebrow}>{course?.name?.toUpperCase()} · {tee?.name?.toUpperCase()} TEES</Text>
         <Text style={s.date}>{dateStr}</Text>
 
-        {/* Score hero */}
         <View style={s.scoreHero}>
           <View>
             <Text style={s.scoreLabel}>TOTAL SCORE</Text>
@@ -57,7 +54,6 @@ export default function RoundSummaryScreen({ route, navigation }: any) {
           </View>
         </View>
 
-        {/* Stats grid */}
         <View style={s.statsGrid}>
           {stats.map(({ label, value, sub }) => (
             <View key={label} style={s.statCard}>
@@ -68,7 +64,6 @@ export default function RoundSummaryScreen({ route, navigation }: any) {
           ))}
         </View>
 
-        {/* Handicap differential */}
         {differential && (
           <View style={s.diffCard}>
             <Text style={s.diffCardLabel}>HANDICAP DIFFERENTIAL</Text>
@@ -79,7 +74,6 @@ export default function RoundSummaryScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {/* Actions */}
         <View style={s.actions}>
           <TouchableOpacity style={s.primaryBtn} onPress={() => navigation.navigate('Home')}>
             <Text style={s.primaryBtnText}>Back to home</Text>
@@ -91,12 +85,13 @@ export default function RoundSummaryScreen({ route, navigation }: any) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </ImageBackground>
   )
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.pageBg },
+  topoBg: { opacity: 0.55, resizeMode: 'cover' },
 
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -132,17 +127,13 @@ const s = StyleSheet.create({
   statLabel: { fontFamily: F.sansMedium, fontSize: 13, color: C.ink1 },
   statSub: { fontFamily: F.mono, fontSize: 10, color: C.ink3, marginTop: 2 },
 
-  diffCard: {
-    backgroundColor: C.fairwayDark, borderRadius: 12, padding: 20, marginBottom: 24,
-  },
+  diffCard: { backgroundColor: C.fairwayDark, borderRadius: 12, padding: 20, marginBottom: 24 },
   diffCardLabel: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.onDarkMuted, marginBottom: 8 },
   diffCardValue: { fontFamily: F.serifBold, fontSize: 52, color: C.onDark, marginBottom: 6 },
   diffCardFormula: { fontFamily: F.mono, fontSize: 11, color: C.onDarkMuted },
 
   actions: { gap: 12 },
-  primaryBtn: {
-    backgroundColor: C.fairwayDark, borderRadius: 12, paddingVertical: 18, alignItems: 'center',
-  },
+  primaryBtn: { backgroundColor: C.fairwayDark, borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   primaryBtnText: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.onDark },
   secondaryBtn: {
     backgroundColor: C.cardBg, borderRadius: 12, paddingVertical: 18, alignItems: 'center',
