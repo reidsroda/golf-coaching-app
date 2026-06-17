@@ -5,7 +5,8 @@ import {
   TextInput, Alert
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg'
+import * as ImagePicker from 'expo-image-picker'
+
 import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
 
@@ -409,6 +410,70 @@ export default function AccountScreen({ navigation }: any) {
     }
   }
 
+  async function pickPhoto() {
+    Alert.alert('Profile Photo', 'Choose an option', [
+      {
+        text: 'Take Photo', onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync()
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Camera permission is required to take a photo.')
+            return
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true, aspect: [1, 1], quality: 0.8,
+          })
+          if (!result.canceled) uploadPhoto(result.assets[0].uri)
+        }
+      },
+      {
+        text: 'Choose from Library', onPress: async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Photo library permission is required.')
+            return
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true, aspect: [1, 1], quality: 0.8,
+          })
+          if (!result.canceled) uploadPhoto(result.assets[0].uri)
+        }
+      },
+      { text: 'Cancel', style: 'cancel' }
+    ])
+  }
+
+  async function uploadPhoto(uri: string) {
+    try {
+      const { data: { user: u } } = await supabase.auth.getUser()
+      if (!u) return
+
+      const ext = uri.split('.').pop() || 'jpg'
+      const fileName = `${u.id}/avatar.${ext}`
+
+      const response = await fetch(uri)
+      const blob = await response.blob()
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, blob, { upsert: true, contentType: `image/${ext}` })
+
+      if (uploadError) {
+        // If storage bucket doesn't exist, just use local URI
+        setProfile((p: any) => ({ ...p, avatar_url: uri }))
+        await supabase.from('users').upsert({ id: u.id, avatar_url: uri })
+        return
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      setProfile((p: any) => ({ ...p, avatar_url: publicUrl }))
+      await supabase.from('users').upsert({ id: u.id, avatar_url: publicUrl })
+    } catch (e) {
+      Alert.alert('Upload failed', 'Could not save photo. Please try again.')
+    }
+  }
+
   const rank = getRank(handicap)
   const displayName = profile?.full_name || 'Set your name'
   const initials = (profile?.full_name || 'G')
@@ -436,7 +501,7 @@ export default function AccountScreen({ navigation }: any) {
         {/* Profile card */}
         <View style={s.profileCard}>
           <View style={s.profileTop}>
-            <TouchableOpacity style={s.avatar} onPress={() => setShowEdit(true)}>
+            <TouchableOpacity style={s.avatar} onPress={pickPhoto}>
               {profile?.avatar_url ? (
                 <Image source={{ uri: profile.avatar_url }} style={s.avatarImg} />
               ) : (
