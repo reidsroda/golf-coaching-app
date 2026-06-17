@@ -8,10 +8,13 @@ import HomeScreen from '../screens/HomeScreen'
 import StatsScreen from '../screens/StatsScreen'
 import AssistantScreen from '../screens/AssistantScreen'
 import AccountScreen from '../screens/AccountScreen'
+import MyBagScreen from '../screens/MyBagScreen'
+import SwingThoughtsScreen from '../screens/SwingThoughtsScreen'
+import SettingsScreen from '../screens/SettingsScreen'
 import AddRoundScreen from '../screens/AddRoundScreen'
 import EnterScoresScreen from '../screens/EnterScoresScreen'
 import RoundSummaryScreen from '../screens/RoundSummaryScreen'
-import HeatmapScreen from '../screens/HeatMapScreen'
+import HeatmapScreen from '../screens/HeatmapScreen'
 import SpiderChartScreen from '../screens/SpiderChartScreen'
 import MetricDetailScreen from '../screens/MetricDetailScreen'
 
@@ -39,6 +42,18 @@ function StatsStack() {
       <Stack.Screen name="Heatmap" component={HeatmapScreen} />
       <Stack.Screen name="SpiderChart" component={SpiderChartScreen} />
       <Stack.Screen name="MetricDetail" component={MetricDetailScreen} />
+    </Stack.Navigator>
+  )
+}
+
+// ─── Me stack ────────────────────────────────────────────────
+function MeStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack.Screen name="AccountHome" component={AccountScreen} />
+      <Stack.Screen name="MyBag" component={MyBagScreen} />
+      <Stack.Screen name="SwingThoughts" component={SwingThoughtsScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
     </Stack.Navigator>
   )
 }
@@ -117,7 +132,7 @@ export default function TabNavigator() {
       <Tab.Screen name="Stats"   component={StatsStack} />
       <Tab.Screen name="Caddie"  component={AssistantScreen} />
       <Tab.Screen name="Play"    component={PlayStack} />
-      <Tab.Screen name="Me"      component={AccountScreen} />
+      <Tab.Screen name="Me"      component={MeStack} />
     </Tab.Navigator>
   )
 }
