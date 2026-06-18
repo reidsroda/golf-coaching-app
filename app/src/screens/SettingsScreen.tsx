@@ -1,10 +1,21 @@
 import { useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Platform
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
+
+function crossPlatformConfirm(title: string, message: string, onConfirm: () => void) {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) onConfirm()
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: title, style: 'destructive', onPress: onConfirm },
+    ])
+  }
+}
 
 type SettingItem = {
   label: string
@@ -26,28 +37,22 @@ export default function SettingsScreen({ navigation }: any) {
   const [handedness, setHandedness] = useState<'right' | 'left'>('right')
 
   async function handleLogOut() {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out', style: 'destructive', onPress: async () => {
-          await supabase.auth.signOut()
-        }
-      }
-    ])
+    crossPlatformConfirm('Log out', 'Are you sure you want to log out?', async () => {
+      await supabase.auth.signOut()
+    })
   }
 
   async function handleDeleteAccount() {
-    Alert.alert(
+    crossPlatformConfirm(
       'Delete Account',
       'This will permanently delete your account and all your data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive', onPress: () => {
-            Alert.alert('Contact Support', 'Please contact support@tapingolfapp.com to delete your account.')
-          }
+      () => {
+        if (Platform.OS === 'web') {
+          window.alert('Please contact support@tapingolfapp.com to delete your account.')
+        } else {
+          Alert.alert('Contact Support', 'Please contact support@tapingolfapp.com to delete your account.')
         }
-      ]
+      }
     )
   }
 
@@ -119,7 +124,7 @@ export default function SettingsScreen({ navigation }: any) {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {sections.map((section, si) => (
           <View key={section.title} style={s.section}>
             <Text style={s.sectionTitle}>{section.title.toUpperCase()}</Text>
@@ -164,7 +169,11 @@ export default function SettingsScreen({ navigation }: any) {
         ))}
 
         {/* Log out */}
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogOut}>
+        <TouchableOpacity
+          style={s.logoutBtn}
+          activeOpacity={0.7}
+          onPress={handleLogOut}
+        >
           <Text style={s.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
@@ -198,7 +207,7 @@ const s = StyleSheet.create({
   valueText: { fontFamily: F.sans, fontSize: 14, color: C.ink2 },
   infoText: { fontFamily: F.mono, fontSize: 12, color: C.ink3 },
 
-  logoutBtn: { backgroundColor: C.teeBlue, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
+  logoutBtn: { backgroundColor: '#2E5C8A', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
   logoutText: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.onDark },
   deleteBtn: { backgroundColor: C.cardBg, borderRadius: 12, paddingVertical: 16, alignItems: 'center', borderWidth: 1.5, borderColor: C.errorRed },
   deleteText: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.errorRed },
