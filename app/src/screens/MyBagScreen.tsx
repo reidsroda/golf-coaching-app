@@ -88,31 +88,26 @@ export default function MyBagScreen({ navigation }: any) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data } = await supabase
+    // Check if user has ANY clubs (including unconfigured)
+    const { data: existing } = await supabase
       .from('user_clubs')
       .select('*')
       .eq('user_id', user.id)
-      .eq('in_bag', true)
       .order('created_at', { ascending: true })
 
-    if (data && data.length > 0) {
-      setClubs(data)
+    if (existing && existing.length > 0) {
+      // Show all in-bag clubs
+      setClubs(existing.filter((c: any) => c.in_bag !== false))
     } else {
-      // First time — seed default bag into DB
+      // First time with no onboarding — seed default bag
       const defaults = ALL_CLUBS.map(c => ({
         ...c, yardage: null, common_miss: null, in_bag: true
       }))
-      const { data: { user: u } } = await supabase.auth.getUser()
-      if (u) {
-        const { data: inserted } = await supabase
-          .from('user_clubs')
-          .insert(defaults.map(c => ({ ...c, user_id: u.id })))
-          .select()
-        if (inserted) setClubs(inserted)
-        else setClubs(defaults)
-      } else {
-        setClubs(defaults)
-      }
+      const { data: inserted } = await supabase
+        .from('user_clubs')
+        .insert(defaults.map(c => ({ ...c, user_id: user.id })))
+        .select()
+      setClubs(inserted || defaults)
     }
     setLoading(false)
   }
