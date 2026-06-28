@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, ImageBackground, Platform, Alert
+  TextInput, Modal, ImageBackground
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -26,34 +26,38 @@ const ALL_CLUBS = [
   { name: 'Ptr', label: 'Putter'          },
 ]
 
-const MISS_OPTIONS = ['Straight', 'Slice', 'Hook', 'Chunk', 'Top', 'Fat', 'Thin']
-
-type Club = { name: string; label: string; yardage: number | null; common_miss: string | null }
+type Club = { name: string; label: string; yardage: string }
 
 export default function OnboardingBagScreen({ navigation }: any) {
   const [clubs, setClubs] = useState<Club[]>(
-    ALL_CLUBS.map(c => ({ ...c, yardage: null, common_miss: null }))
+    ALL_CLUBS.map(c => ({ ...c, yardage: '' }))
   )
-  const [selectedClub, setSelectedClub] = useState<Club | null>(null)
-  const [modalVisible, setModalVisible] = useState(false)
-  const [yardageInput, setYardageInput] = useState('')
-  const [missInput, setMissInput] = useState('')
+  const [addModalVisible, setAddModalVisible] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  function openClub(club: Club) {
-    setSelectedClub(club)
-    setYardageInput(club.yardage ? String(club.yardage) : '')
-    setMissInput(club.common_miss || '')
-    setModalVisible(true)
+  const removedClubs = ALL_CLUBS.filter(c => !clubs.find(b => b.name === c.name))
+
+  function updateYardage(name: string, text: string) {
+    setClubs(prev => prev.map(c => c.name === name ? { ...c, yardage: text } : c))
   }
 
-  function saveClub() {
-    if (!selectedClub) return
-    const yardage = yardageInput ? parseInt(yardageInput) : null
-    setClubs(prev => prev.map(c =>
-      c.name === selectedClub.name ? { ...c, yardage, common_miss: missInput || null } : c
-    ))
-    setModalVisible(false)
+  function removeClub(name: string) {
+    setClubs(prev => prev.filter(c => c.name !== name))
+  }
+
+  function addClub(club: { name: string; label: string }) {
+    setClubs(prev => {
+      const insertIdx = ALL_CLUBS.findIndex(c => c.name === club.name)
+      const newList = [...prev]
+      // Insert in the original order
+      let spliceAt = newList.length
+      for (let i = 0; i < newList.length; i++) {
+        const existingIdx = ALL_CLUBS.findIndex(c => c.name === newList[i].name)
+        if (existingIdx > insertIdx) { spliceAt = i; break }
+      }
+      newList.splice(spliceAt, 0, { ...club, yardage: '' })
+      return newList
+    })
   }
 
   async function handleSave() {
@@ -62,13 +66,13 @@ export default function OnboardingBagScreen({ navigation }: any) {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const clubsToInsert = clubs.map(c => ({
-            user_id: user.id,
-            name: c.name,
-            label: c.label,
-            yardage: c.yardage,
-            common_miss: c.common_miss,
-            in_bag: true,
-          }))
+          user_id: user.id,
+          name: c.name,
+          label: c.label,
+          yardage: c.yardage ? parseInt(c.yardage) : null,
+          common_miss: null,
+          in_bag: true,
+        }))
         await supabase.from('user_clubs').upsert(clubsToInsert, { onConflict: 'user_id,name' })
       }
     } catch (e) {
@@ -87,45 +91,55 @@ export default function OnboardingBagScreen({ navigation }: any) {
           <Ionicons name="chevron-back" size={20} color={C.ink1} />
         </TouchableOpacity>
         <Text style={s.topTitle}>What's in the bag</Text>
-        <Text style={s.stepLabel}>1 / 4</Text>
+        <TouchableOpacity style={s.addBtn} onPress={() => setAddModalVisible(true)}>
+          <Ionicons name="add" size={22} color={C.fairwayDark} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
-        <Text style={s.title}>Add your clubs</Text>
-        <Text style={s.subtitle}>Add your clubs and the carry distance for each. Tap any club to set its yardage.</Text>
-        <Text style={s.progress}>{configured} of {clubs.length} clubs configured</Text>
+      <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <Text style={s.title}>Your clubs</Text>
+        <Text style={s.subtitle}>Type each club's carry distance. Tap the − to remove clubs you don't carry.</Text>
+        <Text style={s.progress}>{configured} of {clubs.length} clubs with yardage</Text>
 
         <View style={s.headerRow}>
           <Text style={s.colLabel}>CLUB</Text>
-          <Text style={s.colLabel}>CARRY</Text>
+          <Text style={s.colLabel}>CARRY (YDS)</Text>
         </View>
 
         <View style={s.clubList}>
           {clubs.map((club, i) => (
-            <TouchableOpacity
+            <View
               key={club.name}
               style={[s.clubRow, i < clubs.length - 1 && s.clubRowBorder]}
-              onPress={() => openClub(club)}
-              activeOpacity={0.7}
             >
               <View style={s.clubBadge}>
                 <Text style={s.clubBadgeText}>{club.name}</Text>
               </View>
               <Text style={s.clubLabel}>{club.label}</Text>
-              <View style={s.yardageWrap}>
-                {club.yardage ? (
-                  <>
-                    <Text style={s.yardageValue}>{club.yardage}</Text>
-                    <Text style={s.yardageUnit}> YDS</Text>
-                    <Ionicons name="pencil" size={12} color={C.fairway} style={{ marginLeft: 6 }} />
-                  </>
-                ) : (
-                  <Text style={s.yardageEmpty}>—</Text>
-                )}
-              </View>
-            </TouchableOpacity>
+              <TextInput
+                style={[s.yardageInput, club.yardage ? s.yardageInputFilled : null]}
+                value={club.yardage}
+                onChangeText={t => updateYardage(club.name, t.replace(/[^0-9]/g, ''))}
+                keyboardType="numeric"
+                placeholder="—"
+                placeholderTextColor={C.bunker}
+                maxLength={3}
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={s.removeBtn}
+                onPress={() => removeClub(club.name)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="remove-circle-outline" size={20} color={C.ink3} />
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
+
+        {clubs.length === 0 && (
+          <Text style={s.emptyHint}>Tap + to add clubs to your bag</Text>
+        )}
 
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -136,41 +150,40 @@ export default function OnboardingBagScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
+      {/* Add club modal */}
+      <Modal visible={addModalVisible} animationType="slide" presentationStyle="pageSheet">
         <View style={m.root}>
           <View style={m.header}>
-            <TouchableOpacity onPress={() => setModalVisible(false)}><Text style={m.cancel}>Cancel</Text></TouchableOpacity>
-            <Text style={m.title}>{selectedClub?.label}</Text>
-            <TouchableOpacity onPress={saveClub}><Text style={m.save}>Save</Text></TouchableOpacity>
+            <Text style={m.title}>Add a club</Text>
+            <TouchableOpacity onPress={() => setAddModalVisible(false)} style={m.doneBtn}>
+              <Text style={m.done}>Done</Text>
+            </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={m.container}>
-            <Text style={m.label}>CARRY DISTANCE</Text>
-            <View style={m.inputWrap}>
-              <TextInput
-                style={m.input}
-                keyboardType="numeric"
-                placeholder="e.g. 260"
-                placeholderTextColor={C.ink3}
-                value={yardageInput}
-                onChangeText={setYardageInput}
-                maxLength={3}
-                autoFocus
-              />
-              <Text style={m.unit}>yards</Text>
+          {removedClubs.length === 0 ? (
+            <View style={m.empty}>
+              <Text style={m.emptyText}>All clubs are already in your bag</Text>
             </View>
-            <Text style={m.label}>MOST COMMON MISS</Text>
-            <View style={m.missGrid}>
-              {MISS_OPTIONS.map(opt => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[m.missBtn, missInput === opt && m.missBtnActive]}
-                  onPress={() => setMissInput(opt === missInput ? '' : opt)}
-                >
-                  <Text style={[m.missBtnText, missInput === opt && m.missBtnTextActive]}>{opt}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
+          ) : (
+            <ScrollView contentContainerStyle={m.container}>
+              <Text style={m.hint}>Tap a club to add it back to your bag</Text>
+              <View style={m.clubList}>
+                {removedClubs.map((club, i) => (
+                  <TouchableOpacity
+                    key={club.name}
+                    style={[m.clubRow, i < removedClubs.length - 1 && m.clubRowBorder]}
+                    onPress={() => { addClub(club); if (removedClubs.length <= 1) setAddModalVisible(false) }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={m.clubBadge}>
+                      <Text style={m.clubBadgeText}>{club.name}</Text>
+                    </View>
+                    <Text style={m.clubLabel}>{club.label}</Text>
+                    <Ionicons name="add-circle-outline" size={22} color={C.fairway} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          )}
         </View>
       </Modal>
     </ImageBackground>
@@ -183,7 +196,7 @@ const s = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.hairline },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   topTitle: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.ink1 },
-  stepLabel: { fontFamily: F.mono, fontSize: 12, color: C.ink3 },
+  addBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   container: { padding: 20 },
   title: { fontFamily: F.serifBold, fontSize: 28, color: C.ink1, marginBottom: 8 },
   subtitle: { fontFamily: F.sans, fontSize: 14, color: C.ink2, lineHeight: 20, marginBottom: 8 },
@@ -191,15 +204,20 @@ const s = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
   colLabel: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3 },
   clubList: { backgroundColor: C.cardBg, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
-  clubRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  clubRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   clubRowBorder: { borderBottomWidth: 1, borderBottomColor: C.hairline },
   clubBadge: { width: 36, height: 36, borderRadius: 8, backgroundColor: C.insetBg, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
   clubBadgeText: { fontFamily: F.monoBold, fontSize: 11, color: C.ink1 },
   clubLabel: { flex: 1, fontFamily: F.sansMedium, fontSize: 14, color: C.ink1 },
-  yardageWrap: { flexDirection: 'row', alignItems: 'center' },
-  yardageValue: { fontFamily: F.serifBold, fontSize: 18, color: C.ink1 },
-  yardageUnit: { fontFamily: F.mono, fontSize: 11, color: C.ink3 },
-  yardageEmpty: { fontFamily: F.mono, fontSize: 16, color: C.bunker },
+  yardageInput: {
+    fontFamily: F.serifBold, fontSize: 18, color: C.ink3,
+    width: 52, textAlign: 'right', padding: 0,
+    borderBottomWidth: 1.5, borderBottomColor: C.border,
+    paddingBottom: 2,
+  },
+  yardageInputFilled: { color: C.ink1, borderBottomColor: C.fairway },
+  removeBtn: { paddingLeft: 6 },
+  emptyHint: { fontFamily: F.sans, fontSize: 14, color: C.ink3, textAlign: 'center', marginTop: 32 },
   footer: { padding: 20, paddingBottom: 40, borderTopWidth: 1, borderTopColor: C.hairline, backgroundColor: 'rgba(241,236,224,0.95)' },
   saveBtn: { backgroundColor: C.fairwayDark, borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
   saveBtnText: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.onDark },
@@ -208,17 +226,17 @@ const s = StyleSheet.create({
 const m = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.pageBg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 20, borderBottomWidth: 1, borderBottomColor: C.hairline },
-  cancel: { fontFamily: F.sansMedium, fontSize: 15, color: C.ink2 },
-  title: { fontFamily: F.sansSemiBold, fontSize: 15, color: C.ink1, flex: 1, textAlign: 'center' },
-  save: { fontFamily: F.sansSemiBold, fontSize: 15, color: C.fairway },
-  container: { padding: 24 },
-  label: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 12, marginTop: 20 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.cardBg, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 14 },
-  input: { fontFamily: F.serifBold, fontSize: 32, color: C.ink1, flex: 1 },
-  unit: { fontFamily: F.mono, fontSize: 13, color: C.ink3 },
-  missGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  missBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, backgroundColor: C.cardBg, borderWidth: 1.5, borderColor: C.border },
-  missBtnActive: { backgroundColor: C.fairwayDark, borderColor: C.fairwayDark },
-  missBtnText: { fontFamily: F.sansMedium, fontSize: 14, color: C.ink2 },
-  missBtnTextActive: { color: C.onDark },
+  title: { fontFamily: F.sansSemiBold, fontSize: 17, color: C.ink1 },
+  doneBtn: { paddingHorizontal: 4 },
+  done: { fontFamily: F.sansSemiBold, fontSize: 16, color: C.fairway },
+  container: { padding: 20 },
+  hint: { fontFamily: F.sans, fontSize: 13, color: C.ink3, marginBottom: 16 },
+  clubList: { backgroundColor: C.cardBg, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  clubRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  clubRowBorder: { borderBottomWidth: 1, borderBottomColor: C.hairline },
+  clubBadge: { width: 36, height: 36, borderRadius: 8, backgroundColor: C.insetBg, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  clubBadgeText: { fontFamily: F.monoBold, fontSize: 11, color: C.ink1 },
+  clubLabel: { flex: 1, fontFamily: F.sansMedium, fontSize: 14, color: C.ink1 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  emptyText: { fontFamily: F.sans, fontSize: 15, color: C.ink3, textAlign: 'center' },
 })

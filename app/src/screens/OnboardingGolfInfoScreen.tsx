@@ -1,20 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ImageBackground, ScrollView, TextInput, Dimensions,
-  PanResponder, Animated, Alert
+  ImageBackground, ScrollView, TextInput
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
 
-const { width } = Dimensions.get('window')
 const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
-
-const SLIDER_MIN = -10  // +10 handicap (better than scratch)
-const SLIDER_MAX = 36
-const SLIDER_RANGE = SLIDER_MAX - SLIDER_MIN
-const SLIDER_W = width - 48 - 100 // track width
 
 const STRENGTH_ITEMS = [
   { key: 'driving',  label: 'Driving / Off the tee', sub: 'Tee shots, distance' },
@@ -37,11 +30,8 @@ const RANK_COLORS: Record<number, string> = {
   3: C.errorRed,
 }
 
-// Draggable strength ranker
 function StrengthRanker({ order, onReorder }: { order: string[]; onReorder: (o: string[]) => void }) {
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null)
   const [items, setItems] = useState(order)
-  const ITEM_H = 64
 
   useEffect(() => { setItems(order) }, [order])
 
@@ -89,7 +79,6 @@ function StrengthRanker({ order, onReorder }: { order: string[]; onReorder: (o: 
                 <Ionicons name="chevron-down" size={16} color={idx === items.length - 1 ? C.bunker : C.ink2} />
               </TouchableOpacity>
             </View>
-            <Ionicons name="reorder-three-outline" size={20} color={C.ink3} style={{ marginLeft: 4 }} />
           </View>
         )
       })}
@@ -117,13 +106,9 @@ export default function OnboardingGolfInfoScreen({ navigation }: any) {
   const [courseResults, setCourseResults] = useState<any[]>([])
   const [selectedCourse, setSelectedCourse] = useState<any>(null)
   const [showDropdown, setShowDropdown] = useState(false)
-  const [handicap, setHandicap] = useState(18)
   const [handicapInput, setHandicapInput] = useState('18')
-  const [editingHandicap, setEditingHandicap] = useState(false)
   const [strengthOrder, setStrengthOrder] = useState(['driving', 'irons', 'wedges', 'putting'])
   const [loading, setLoading] = useState(false)
-
-  const sliderX = useRef(new Animated.Value(((handicap - SLIDER_MIN) / SLIDER_RANGE) * SLIDER_W)).current
 
   async function searchCourses(text: string) {
     setCourseQuery(text)
@@ -138,28 +123,13 @@ export default function OnboardingGolfInfoScreen({ navigation }: any) {
     setShowDropdown(true)
   }
 
-  function handleSlider(gestureX: number) {
-    const clamped = Math.max(0, Math.min(SLIDER_W, gestureX))
-    const newHdcp = Math.round(SLIDER_MIN + (clamped / SLIDER_W) * SLIDER_RANGE)
-    setHandicap(newHdcp)
-    setHandicapInput(String(newHdcp))
-    sliderX.setValue(clamped)
-  }
-
-  const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => handleSlider(e.nativeEvent.locationX),
-    onPanResponderMove: (_, gs) => {
-      const baseX = ((handicap - SLIDER_MIN) / SLIDER_RANGE) * SLIDER_W
-      handleSlider(baseX + gs.dx)
-    },
-  })).current
-
   async function handleContinue() {
     setLoading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        const parsed = parseFloat(handicapInput)
+        const handicap = isNaN(parsed) ? 18 : Math.max(-10, Math.min(54, parsed))
         await supabase.from('users').upsert({
           id: user.id,
           home_course: selectedCourse?.name || courseQuery || null,
@@ -168,14 +138,11 @@ export default function OnboardingGolfInfoScreen({ navigation }: any) {
         })
       }
     } catch (e) {
-      // Continue even if save fails
       console.log('Save error:', e)
     }
     setLoading(false)
     navigation.navigate('OnboardingMore')
   }
-
-  const thumbPos = ((handicap - SLIDER_MIN) / SLIDER_RANGE) * SLIDER_W
 
   return (
     <ImageBackground source={TOPO_BG} style={s.root} imageStyle={s.topoBg}>
@@ -236,53 +203,28 @@ export default function OnboardingGolfInfoScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* Handicap slider */}
+        {/* Handicap number input */}
         <Text style={s.label}>APPROXIMATE HANDICAP</Text>
         <View style={s.hdcpCard}>
-          <TouchableOpacity onPress={() => setEditingHandicap(true)} style={s.hdcpNumWrap}>
-            {editingHandicap ? (
-              <TextInput
-                style={s.hdcpInput}
-                value={handicapInput}
-                onChangeText={t => {
-                  setHandicapInput(t)
-                  const v = parseInt(t)
-                  if (!isNaN(v) && v >= SLIDER_MIN && v <= SLIDER_MAX) {
-                    setHandicap(v)
-                    sliderX.setValue(((v - SLIDER_MIN) / SLIDER_RANGE) * SLIDER_W)
-                  }
-                }}
-                onBlur={() => setEditingHandicap(false)}
-                keyboardType="numbers-and-punctuation"
-                autoFocus
-                maxLength={4}
-              />
-            ) : (
-              <Text style={s.hdcpNum}>{handicap > 0 ? handicap : handicap === 0 ? 'E' : `+${Math.abs(handicap)}`}</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Slider track */}
-          <View style={s.sliderWrap} {...panResponder.panHandlers}>
-            <View style={s.sliderTrack}>
-              <View style={[s.sliderFill, { width: thumbPos }]} />
-            </View>
-            <View style={[s.sliderThumb, { left: thumbPos - 10 }]} />
+          <View style={s.hdcpRow}>
+            <TextInput
+              style={s.hdcpInput}
+              value={handicapInput}
+              onChangeText={setHandicapInput}
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+              placeholder="18"
+              placeholderTextColor={C.ink3}
+              selectTextOnFocus
+            />
+            <Text style={s.hdcpUnit}>HCP</Text>
           </View>
-
-          <View style={s.sliderLabels}>
-            <Text style={s.sliderLabel}>+10 · SCRATCH</Text>
-            <Text style={s.sliderLabel}>36</Text>
-          </View>
+          <Text style={s.hdcpHint}>+10 (better than scratch) to 54 · We'll refine it as you play</Text>
         </View>
-
-        {handicap > 20 && (
-          <Text style={s.hdcpNote}>Don't know? Estimate — we'll refine it as you log rounds.</Text>
-        )}
 
         {/* Strength ranking */}
         <Text style={s.label}>RANK YOUR GAME</Text>
-        <Text style={s.rankSub}>Drag to reorder — strongest on top, weakest at the bottom.</Text>
+        <Text style={s.rankSub}>Tap the arrows to reorder — strongest on top, weakest at the bottom.</Text>
         <StrengthRanker order={strengthOrder} onReorder={setStrengthOrder} />
 
       </ScrollView>
@@ -312,7 +254,6 @@ const s = StyleSheet.create({
   titleItalic: { fontFamily: F.serifBoldItalic, fontSize: 34, color: C.ink1, lineHeight: 40, marginBottom: 28 },
   label: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 10, marginTop: 20 },
 
-  // Course search
   searchWrap: { position: 'relative', zIndex: 10 },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.cardBg, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, borderWidth: 1, borderColor: C.border },
   searchBoxActive: { borderColor: C.fairway },
@@ -324,20 +265,12 @@ const s = StyleSheet.create({
   dropdownName: { fontFamily: F.sansMedium, fontSize: 14, color: C.ink1 },
   dropdownMeta: { fontFamily: F.mono, fontSize: 11, color: C.ink3, marginTop: 2 },
 
-  // Handicap
   hdcpCard: { backgroundColor: C.cardBg, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 16 },
-  hdcpNumWrap: { marginBottom: 16 },
-  hdcpNum: { fontFamily: F.serifBold, fontSize: 52, color: C.ink1, lineHeight: 58 },
-  hdcpInput: { fontFamily: F.serifBold, fontSize: 52, color: C.ink1, lineHeight: 58, padding: 0 },
-  sliderWrap: { height: 32, justifyContent: 'center', position: 'relative' },
-  sliderTrack: { height: 4, backgroundColor: C.insetBg, borderRadius: 2, overflow: 'hidden' },
-  sliderFill: { height: 4, backgroundColor: C.fairway, borderRadius: 2 },
-  sliderThumb: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: C.fairway, top: 6, shadowColor: C.fairway, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 4 },
-  sliderLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  sliderLabel: { fontFamily: F.mono, fontSize: 10, color: C.ink3 },
-  hdcpNote: { fontFamily: F.sans, fontSize: 12, color: C.ink3, fontStyle: 'italic', marginTop: 8 },
+  hdcpRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hdcpInput: { fontFamily: F.serifBold, fontSize: 52, color: C.ink1, lineHeight: 58, padding: 0, minWidth: 80 },
+  hdcpUnit: { fontFamily: F.mono, fontSize: 14, color: C.ink3, marginTop: 8 },
+  hdcpHint: { fontFamily: F.sans, fontSize: 12, color: C.ink3, fontStyle: 'italic', marginTop: 10 },
 
-  // Rank sub
   rankSub: { fontFamily: F.sans, fontSize: 13, color: C.ink2, marginBottom: 12, marginTop: -4 },
 
   footer: { padding: 24, paddingBottom: 40, backgroundColor: 'rgba(241,236,224,0.92)', borderTopWidth: 1, borderTopColor: C.hairline },

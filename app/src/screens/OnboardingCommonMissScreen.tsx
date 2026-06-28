@@ -1,127 +1,97 @@
 import { JSX, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ImageBackground, Dimensions, Platform
+  ImageBackground, Dimensions
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import Svg, { Path, Circle, Line } from 'react-native-svg'
+import Svg, { Path, Circle, Polygon } from 'react-native-svg'
 import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
 
 const { width } = Dimensions.get('window')
 const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
 
+// Compute polygon points for an arrowhead at (toX, toY) coming from (fromX, fromY)
+function arrowPoly(fromX: number, fromY: number, toX: number, toY: number, len = 7, w = 3.5) {
+  const dx = toX - fromX, dy = toY - fromY
+  const d = Math.sqrt(dx * dx + dy * dy)
+  const nx = dx / d, ny = dy / d
+  const px = -ny, py = nx
+  const bx = toX - nx * len, by = toY - ny * len
+  return `${toX.toFixed(1)},${toY.toFixed(1)} ${(bx + px * w).toFixed(1)},${(by + py * w).toFixed(1)} ${(bx - px * w).toFixed(1)},${(by - py * w).toFixed(1)}`
+}
 
-// Ball flight path illustrations
 function BallFlight({ type, color = '#C26B3C' }: { type: string; color?: string }) {
   const size = 64
   const stroke = color
   const sw = '1.5'
 
   const paths: Record<string, JSX.Element> = {
-    // Driving misses
     Slice: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
         <Path d="M8 50 Q20 45 40 20 L52 10" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="52" cy="10" r="3" fill={stroke} />
+        <Polygon points={arrowPoly(40, 20, 52, 10)} fill={stroke} />
         <Circle cx="8" cy="50" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
       </Svg>
     ),
     Hook: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
         <Path d="M56 50 Q44 45 24 20 L12 10" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="12" cy="10" r="3" fill={stroke} />
+        <Polygon points={arrowPoly(24, 20, 12, 10)} fill={stroke} />
         <Circle cx="56" cy="50" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
       </Svg>
     ),
     Push: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
         <Path d="M8 52 L52 14" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="52" cy="14" r="3" fill={stroke} />
+        <Polygon points={arrowPoly(8, 52, 52, 14)} fill={stroke} />
         <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
       </Svg>
     ),
     Pull: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
         <Path d="M56 52 L12 14" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="12" cy="14" r="3" fill={stroke} />
+        <Polygon points={arrowPoly(56, 52, 12, 14)} fill={stroke} />
         <Circle cx="56" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
       </Svg>
     ),
-    Block: (
-      <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 52 Q20 40 44 22 L56 18" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="56" cy="18" r="3" fill={stroke} />
-        <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-      </Svg>
-    ),
-    // Iron/wedge misses
     Thin: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
         <Path d="M8 52 Q20 48 36 44 L56 42" stroke={stroke} strokeWidth={sw} strokeDasharray="4 2" fill="none" strokeLinecap="round"/>
-        <Circle cx="56" cy="42" r="3" fill={stroke} />
-        <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-      </Svg>
-    ),
-    Fat: (
-      <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 52 Q16 48 24 52 L28 54" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="28" cy="54" r="3" fill={stroke} />
+        <Polygon points={arrowPoly(36, 44, 56, 42)} fill={stroke} />
         <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
       </Svg>
     ),
     Chunk: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
         <Path d="M8 52 Q14 50 18 54 L20 56" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="20" cy="56" r="3" fill={stroke} />
+        <Polygon points={arrowPoly(18, 54, 20, 56)} fill={stroke} />
         <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
       </Svg>
     ),
-    Blade: (
+    // Putting misses — includes hole marker
+    'Putt Push': (
       <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 48 L56 48" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="56" cy="48" r="3" fill={stroke} />
-        <Circle cx="8" cy="48" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-      </Svg>
-    ),
-    // Putting misses
-    'Left lip': (
-      <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 52 Q28 30 36 28 Q38 28 36 32" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="36" cy="32" r="3" fill={stroke} />
+        <Path d="M8 52 L52 14" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
+        <Polygon points={arrowPoly(8, 52, 52, 14)} fill={stroke} />
         <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-        <Circle cx="32" cy="28" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
+        <Circle cx="32" cy="33" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
       </Svg>
     ),
-    'Right lip': (
+    'Putt Pull': (
       <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M56 52 Q36 30 28 28 Q26 28 28 32" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="28" cy="32" r="3" fill={stroke} />
+        <Path d="M56 52 L12 14" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
+        <Polygon points={arrowPoly(56, 52, 12, 14)} fill={stroke} />
         <Circle cx="56" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-        <Circle cx="32" cy="28" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
+        <Circle cx="34" cy="33" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
       </Svg>
     ),
-    Short: (
+    Pace: (
       <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 52 Q24 38 32 34" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="32" cy="34" r="3" fill={stroke} />
+        <Path d="M8 52 Q24 36 32 8" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
+        <Polygon points={arrowPoly(24, 36, 32, 8)} fill={stroke} />
         <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-        <Circle cx="32" cy="28" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
-      </Svg>
-    ),
-    Long: (
-      <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 52 Q24 34 32 20" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="32" cy="20" r="3" fill={stroke} />
-        <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
-        <Circle cx="32" cy="28" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
-      </Svg>
-    ),
-    Yips: (
-      <Svg width={size} height={size} viewBox="0 0 64 64">
-        <Path d="M8 52 Q16 44 24 46 Q32 48 36 38 Q40 28 44 30" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-        <Circle cx="44" cy="30" r="3" fill={stroke} />
-        <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
+        <Circle cx="32" cy="30" r="5" stroke={stroke} strokeWidth="1" fill="none" strokeDasharray="2 2"/>
       </Svg>
     ),
   }
@@ -129,7 +99,7 @@ function BallFlight({ type, color = '#C26B3C' }: { type: string; color?: string 
   return paths[type] || (
     <Svg width={size} height={size} viewBox="0 0 64 64">
       <Path d="M8 52 Q32 30 56 14" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round"/>
-      <Circle cx="56" cy="14" r="3" fill={stroke} />
+      <Polygon points={arrowPoly(32, 30, 56, 14)} fill={stroke} />
       <Circle cx="8" cy="52" r="2.5" stroke={stroke} strokeWidth="1.5" fill="none"/>
     </Svg>
   )
@@ -140,27 +110,34 @@ const MISS_CATEGORIES = [
     key: 'driving',
     label: 'DRIVING',
     color: C.fairway,
-    misses: ['Slice', 'Hook', 'Push', 'Pull', 'Block'],
+    misses: ['Slice', 'Hook', 'Push', 'Pull'],
   },
   {
     key: 'irons',
     label: 'IRONS',
     color: C.flagYellow,
-    misses: ['Slice', 'Hook', 'Thin', 'Fat', 'Push', 'Pull'],
+    misses: ['Slice', 'Hook', 'Thin', 'Push', 'Pull'],
   },
   {
     key: 'wedges',
     label: 'WEDGES',
     color: C.clay,
-    misses: ['Thin', 'Fat', 'Chunk', 'Blade', 'Pull'],
+    misses: ['Thin', 'Chunk', 'Push', 'Pull'],
   },
   {
     key: 'putting',
     label: 'PUTTING',
     color: C.teeBlue,
-    misses: ['Left lip', 'Right lip', 'Short', 'Long', 'Yips'],
+    misses: ['Putt Push', 'Putt Pull', 'Pace'],
   },
 ]
+
+// Map display name to canonical save name for putting
+function saveName(miss: string): string {
+  if (miss === 'Putt Push') return 'Push'
+  if (miss === 'Putt Pull') return 'Pull'
+  return miss
+}
 
 export default function OnboardingCommonMissScreen({ navigation }: any) {
   const [selected, setSelected] = useState<Record<string, string[]>>({
@@ -188,7 +165,7 @@ export default function OnboardingCommonMissScreen({ navigation }: any) {
           .map(([cat, misses]) => ({
             user_id: user.id,
             category: 'problem',
-            content: `Common miss — ${cat}: ${misses.join(', ')}`,
+            content: `Common miss — ${cat}: ${misses.map(saveName).join(', ')}`,
             pinned: false,
           }))
         if (thoughts.length > 0) {
@@ -199,14 +176,10 @@ export default function OnboardingCommonMissScreen({ navigation }: any) {
       console.log('Save error:', e)
     }
     setSaving(false)
-    if (Platform.OS === 'web') {
-      window.location.reload()
-    } else {
-      await supabase.auth.refreshSession()
-    }
+    navigation.navigate('OnboardingCurrentDrills')
   }
 
-  const cellW = (width - 40 - 32) / 3
+  const cellW = (width - 40 - 24) / 3
 
   return (
     <ImageBackground source={TOPO_BG} style={s.root} imageStyle={s.topoBg}>
@@ -233,6 +206,7 @@ export default function OnboardingCommonMissScreen({ navigation }: any) {
             <View style={s.missGrid}>
               {cat.misses.map(miss => {
                 const isSelected = selected[cat.key]?.includes(miss)
+                const displayName = miss.startsWith('Putt ') ? miss.replace('Putt ', '') : miss
                 return (
                   <TouchableOpacity
                     key={miss}
@@ -246,7 +220,7 @@ export default function OnboardingCommonMissScreen({ navigation }: any) {
                       </View>
                     )}
                     <BallFlight type={miss} color={isSelected ? cat.color : '#C8B8A2'} />
-                    <Text style={[s.missLabel, isSelected && s.missLabelActive]}>{miss}</Text>
+                    <Text style={[s.missLabel, isSelected && s.missLabelActive]}>{displayName}</Text>
                   </TouchableOpacity>
                 )
               })}

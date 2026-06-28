@@ -1,9 +1,10 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { useRef } from 'react'
 
+// HomeScreen kept in code but not displayed in the tab bar
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import HomeScreen from '../screens/HomeScreen'
 import StatsScreen from '../screens/StatsScreen'
 import AssistantScreen from '../screens/AssistantScreen'
@@ -17,6 +18,7 @@ import RoundSummaryScreen from '../screens/RoundSummaryScreen'
 import HeatmapScreen from '../screens/HeatmapScreen'
 import SpiderChartScreen from '../screens/SpiderChartScreen'
 import MetricDetailScreen from '../screens/MetricDetailScreen'
+import AllRoundsScreen from '../screens/AllRoundsScreen'
 
 import { C, F } from '../theme'
 
@@ -42,6 +44,7 @@ function StatsStack() {
       <Stack.Screen name="Heatmap" component={HeatmapScreen} />
       <Stack.Screen name="SpiderChart" component={SpiderChartScreen} />
       <Stack.Screen name="MetricDetail" component={MetricDetailScreen} />
+      <Stack.Screen name="AllRounds" component={AllRoundsScreen} />
     </Stack.Navigator>
   )
 }
@@ -60,14 +63,13 @@ function MeStack() {
 
 // ─── Custom tab bar ───────────────────────────────────────────
 const TABS = [
-  { name: 'Home',      icon: 'home-outline',      iconActive: 'home' },
-  { name: 'Stats',     icon: 'bar-chart-outline',  iconActive: 'bar-chart' },
-  { name: 'Caddie',    icon: 'chatbubble-outline', iconActive: 'chatbubble' },
-  { name: 'Play',      icon: 'flag-outline',       iconActive: 'flag' },
-  { name: 'Me',        icon: 'person-outline',     iconActive: 'person' },
+  { name: 'Stats',  icon: 'bar-chart-outline',  iconActive: 'bar-chart' },
+  { name: 'Caddie', icon: 'chatbubble-outline',  iconActive: 'chatbubble' },
+  { name: 'Play',   icon: 'flag-outline',        iconActive: 'flag' },
+  { name: 'Me',     icon: 'person-outline',      iconActive: 'person' },
 ]
 
-function CustomTabBar({ state, descriptors, navigation }: any) {
+function CustomTabBar({ state, navigation }: any) {
   return (
     <View style={tb.bar}>
       {state.routes.map((route: any, index: number) => {
@@ -128,11 +130,10 @@ export default function TabNavigator() {
       tabBar={props => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen name="Home"    component={HomeScreen} />
-      <Tab.Screen name="Stats"   component={StatsStack} />
-      <Tab.Screen name="Caddie"  component={AssistantScreen} />
-      <Tab.Screen name="Play"    component={PlayStack} />
-      <Tab.Screen name="Me"      component={MeStack} />
+      <Tab.Screen name="Stats"  component={StatsStack} />
+      <Tab.Screen name="Caddie" component={AssistantScreen} />
+      <Tab.Screen name="Play"   component={PlayStack} />
+      <Tab.Screen name="Me"     component={MeStack} />
     </Tab.Navigator>
   )
 }

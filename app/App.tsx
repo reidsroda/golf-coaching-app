@@ -16,6 +16,7 @@ import OnboardingMoreScreen from './src/screens/OnboardingMoreScreen'
 import OnboardingBagScreen from './src/screens/OnboardingBagScreen'
 import OnboardingSwingThoughtsScreen from './src/screens/OnboardingSwingThoughtsScreen'
 import OnboardingCommonMissScreen from './src/screens/OnboardingCommonMissScreen'
+import OnboardingCurrentDrillsScreen from './src/screens/OnboardingCurrentDrillsScreen'
 import TabNavigator from './src/navigation/TabNavigator'
 import { C } from './src/theme'
 
@@ -74,6 +75,7 @@ export default function App() {
             <Stack.Screen name="OnboardingBag" component={OnboardingBagScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="OnboardingSwingThoughts" component={OnboardingSwingThoughtsScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="OnboardingCommonMiss" component={OnboardingCommonMissScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="OnboardingCurrentDrills" component={OnboardingCurrentDrillsScreen} options={{ animation: 'slide_from_right' }} />
           </>
         )}
       </Stack.Navigator>
