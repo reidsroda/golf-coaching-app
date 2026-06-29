@@ -208,7 +208,7 @@ function RankModal({ visible, onClose, currentRank, handicap }: any) {
             const isPast = i > currentIdx
             return (
               <View key={rank.name} style={[rm.rankRow, isCurrent && rm.rankRowActive]}>
-                <RankBadge tier={rank.tier} subTier={rank.subTier} size={100} />
+                <RankBadge tier={rank.tier} subTier={rank.subTier} size={80} />
                 <View style={rm.rankInfo}>
                   <Text style={[rm.rankName, { color: isPast ? C.ink3 : rank.color }]}>{rank.name}</Text>
                   <Text style={rm.rankRange}>Hdcp {rank.minHdcp === -10 ? 'Below 0' : rank.minHdcp} – {rank.maxHdcp === 99 ? '36+' : rank.maxHdcp}</Text>
