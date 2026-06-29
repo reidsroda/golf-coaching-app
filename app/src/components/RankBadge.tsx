@@ -235,7 +235,7 @@ function DiamondLayer({
 // All badges use the SAME canvas size (BADGE_SIZE) so icons align perfectly.
 // Ball is smaller for II/III to make room for diamonds within the same space.
 
-const BADGE_SIZE = 120  // fixed container — all tiers same size
+const BADGE_SIZE = 180  // fixed container — all tiers same size
 
 type Props = { tier: string; subTier: SubTier; size?: number }
 
@@ -246,8 +246,8 @@ export function RankBadge({ tier, subTier, size = BADGE_SIZE }: Props) {
   const ballSize = subTier === 'I' ? Math.round(size * 0.88) : Math.round(size * 0.72)
 
   // Diamond half-sizes relative to container
-  const innerH = size * 0.50   // inner diamond half-size
-  const outerH = size * 0.60   // outer diamond half-size (III only)
+  const innerH = size * 0.46   // inner diamond half-size
+  const outerH = size * 0.56   // outer diamond half-size (III only)
 
   // Independent animations for non-unison pulse
   const innerAnim = useRef(new Animated.Value(0)).current
