@@ -1,58 +1,71 @@
 import { useEffect, useRef } from 'react'
 import { View, Animated, Easing } from 'react-native'
 import Svg, {
-  Circle, Ellipse, Defs, RadialGradient, Stop, Path, G, ClipPath
+  Circle, Ellipse, Path, G, Defs, RadialGradient, Stop, ClipPath
 } from 'react-native-svg'
 
-// ─── Tier color config ────────────────────────────────────────
+// ─── Tier colors ──────────────────────────────────────────────
 export const TIER_COLORS: Record<string, {
   base: string; mid: string; bright: string; glow: string
 }> = {
-  bronze:      { base: '#5C2E18', mid: '#C26B3C', bright: '#E8A870', glow: '#C26B3C' },
-  silver:      { base: '#4B5563', mid: '#9CA3AF', bright: '#E2E8F0', glow: '#9CA3AF' },
-  gold:        { base: '#7A4F08', mid: '#C9A23E', bright: '#F5D878', glow: '#C9A23E' },
-  diamond:     { base: '#1A3A6A', mid: '#4A9BE8', bright: '#BEE0FA', glow: '#4A9BE8' },
-  master:      { base: '#4A0A0A', mid: '#B14B3A', bright: '#E87A6A', glow: '#B14B3A' },
-  grandmaster: { base: '#2E0F50', mid: '#8B5CF6', bright: '#D4BBFE', glow: '#8B5CF6' },
+  bronze:      { base: '#4A1E08', mid: '#C26B3C', bright: '#F0B882', glow: '#C26B3C' },
+  silver:      { base: '#2E3440', mid: '#9CA3AF', bright: '#F1F5F9', glow: '#9CA3AF' },
+  gold:        { base: '#5C3A02', mid: '#C9A23E', bright: '#FAE078', glow: '#C9A23E' },
+  diamond:     { base: '#0D2A4A', mid: '#4A9BE8', bright: '#D0EEFF', glow: '#4A9BE8' },
+  master:      { base: '#2D0505', mid: '#B14B3A', bright: '#F08070', glow: '#B14B3A' },
+  grandmaster: { base: '#1E0840', mid: '#8B5CF6', bright: '#E0D0FF', glow: '#8B5CF6' },
 }
 
 export type SubTier = 'I' | 'II' | 'III'
 
-// ─── Generate dimple positions using Fibonacci sphere ─────────
-function generateDimples(R: number) {
-  const count = Math.round(R * R * 0.52)
+// ─── Dimple generation (Fibonacci sphere) ─────────────────────
+type Dimple = {
+  px: number; py: number; dr: number
+  shadowA: number; hlA: number; sOff: number
+  showRim: boolean; showSpec: boolean
+}
+
+function generateDimples(R: number): Dimple[] {
+  const N = 380
   const golden = Math.PI * (3 - Math.sqrt(5))
-  const dr = R * 0.068
-  const dimples: Array<{
-    px: number; py: number; dr: number
-    shadowAlpha: number; hlAlpha: number; shadowOffset: number; showHl: boolean
-  }> = []
+  const dimR_base = R * 0.062
+  const out: Dimple[] = []
 
-  for (let i = 0; i < count; i++) {
-    const y3d = 1 - (i / (count - 1)) * 2
-    const latR = Math.sqrt(Math.max(0, 1 - y3d * y3d))
+  for (let i = 0; i < N; i++) {
+    const y3 = -1 + (2 * i) / (N - 1)
+    const r3 = Math.sqrt(Math.max(0, 1 - y3 * y3))
     const theta = golden * i
-    const x3d = Math.cos(theta) * latR
-    const z3d = Math.sin(theta) * latR
+    const x3 = Math.cos(theta) * r3
+    const z3 = Math.sin(theta) * r3
 
-    if (z3d < -0.15) continue
+    // Slight rotation for natural look
+    const x3r =  x3 * 0.98 + z3 * 0.2
+    const z3r = -x3 * 0.20 + z3 * 0.98
 
-    const tiltX = 0.08, tiltY = -0.05
-    const px = (x3d + tiltX * z3d) * R
-    const py = -(y3d + tiltY * z3d) * R
+    if (z3r < -0.05) continue
 
-    if (Math.sqrt(px * px + py * py) > R - dr * 1.2) continue
+    const px = x3r * R
+    const py = -y3  * R
 
-    const depth = z3d
-    const depthFactor = (depth + 0.15) / 1.15
-    const litness = Math.max(0, -x3d * 0.4 + y3d * 0.4 + z3d * 0.82)
-    const shadowAlpha = 0.08 + depthFactor * 0.16
-    const hlAlpha = 0.06 + depthFactor * 0.14
-    const shadowOffset = dr * (0.18 + litness * 0.12)
+    if (Math.sqrt(px * px + py * py) > R - dimR_base * 1.1) continue
 
-    dimples.push({ px, py, dr, shadowAlpha, hlAlpha, shadowOffset, showHl: depthFactor > 0.3 })
+    // Vary dimple size slightly (like real balls)
+    const sizeVar = 0.85 + 0.3 * Math.abs(Math.sin(i * 1.618))
+    const dr = dimR_base * sizeVar
+
+    const depth = (z3r + 0.05) / 1.05
+    const lightDot = Math.max(0, -x3r * 0.35 + y3 * 0.35 + z3r * 0.88)
+    const shadowA = 0.10 + depth * 0.18
+    const hlA    = 0.05 + depth * 0.16
+    const sOff   = dr * (0.2 + lightDot * 0.15)
+
+    out.push({
+      px, py, dr, shadowA, hlA, sOff,
+      showRim:  depth > 0.20,
+      showSpec: depth > 0.45,
+    })
   }
-  return dimples
+  return out
 }
 
 // ─── Golf ball SVG ─────────────────────────────────────────────
@@ -60,9 +73,12 @@ function GolfBallSvg({ colors, size }: { colors: typeof TIER_COLORS[string]; siz
   const R = size / 2
   const cx = R, cy = R
   const dimples = generateDimples(R)
-  const clipId = `bc_${size}`
-  const gradId = `bg_${size}`
-  const hlId   = `bh_${size}`
+
+  const clipId = `bc${size}`
+  const sgId   = `sg${size}`
+  const rimId  = `rim${size}`
+  const hlId   = `hl${size}`
+  const flId   = `fl${size}`
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -70,109 +86,145 @@ function GolfBallSvg({ colors, size }: { colors: typeof TIER_COLORS[string]; siz
         <ClipPath id={clipId}>
           <Circle cx={cx} cy={cy} r={R - 0.5} />
         </ClipPath>
-        <RadialGradient id={gradId} cx="28%" cy="25%" r="75%">
+        {/* Sphere gradient */}
+        <RadialGradient id={sgId} cx="28%" cy="24%" r="76%">
           <Stop offset="0%"   stopColor={colors.bright} />
-          <Stop offset="18%"  stopColor={colors.bright} />
-          <Stop offset="50%"  stopColor={colors.mid}    stopOpacity="0.92" />
-          <Stop offset="82%"  stopColor={colors.base} />
-          <Stop offset="100%" stopColor="#050302" />
+          <Stop offset="12%"  stopColor={colors.bright} />
+          <Stop offset="38%"  stopColor={colors.mid}    stopOpacity="0.92" />
+          <Stop offset="72%"  stopColor={colors.base} />
+          <Stop offset="100%" stopColor="#020100" />
         </RadialGradient>
-        <RadialGradient id={hlId} cx="22%" cy="20%" r="40%">
-          <Stop offset="0%"   stopColor="rgba(255,255,255,0.60)" />
-          <Stop offset="45%"  stopColor="rgba(255,255,255,0.24)" />
+        {/* Rim darkening */}
+        <RadialGradient id={rimId} cx="50%" cy="50%" r="50%">
+          <Stop offset="70%"  stopColor="rgba(0,0,0,0)" />
+          <Stop offset="88%"  stopColor="rgba(0,0,0,0.10)" />
+          <Stop offset="100%" stopColor="rgba(0,0,0,0.55)" />
+        </RadialGradient>
+        {/* Specular */}
+        <RadialGradient id={hlId} cx="50%" cy="50%" r="50%">
+          <Stop offset="0%"   stopColor="rgba(255,255,255,0.68)" />
+          <Stop offset="35%"  stopColor="rgba(255,255,255,0.28)" />
+          <Stop offset="70%"  stopColor="rgba(255,255,255,0.08)" />
+          <Stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </RadialGradient>
+        {/* Fill light */}
+        <RadialGradient id={flId} cx="30%" cy="70%" r="55%">
+          <Stop offset="0%"   stopColor="rgba(255,255,255,0.07)" />
           <Stop offset="100%" stopColor="rgba(255,255,255,0)" />
         </RadialGradient>
       </Defs>
 
       {/* Sphere base */}
-      <Circle cx={cx} cy={cy} r={R - 0.5} fill={`url(#${gradId})`} />
+      <Circle cx={cx} cy={cy} r={R - 0.5} fill={`url(#${sgId})`} />
 
-      {/* Dimples clipped to ball */}
+      {/* All dimples clipped to ball */}
       <G clipPath={`url(#${clipId})`}>
         {dimples.map((d, i) => {
           const px = cx + d.px
           const py = cy + d.py
+          const sA = d.shadowA.toFixed(2)
+          const sA15 = (d.shadowA * 1.5).toFixed(2)
+          const sA06 = (d.shadowA * 0.6).toFixed(2)
           return (
             <G key={i}>
-              {/* Shadow crescent */}
-              <Circle
-                cx={px + d.shadowOffset}
-                cy={py + d.shadowOffset}
-                r={d.dr}
-                fill={`rgba(0,0,0,${(d.shadowAlpha * 1.4).toFixed(2)})`}
-              />
-              {/* Dimple bowl */}
-              <Circle
-                cx={px} cy={py} r={d.dr}
-                fill={`rgba(0,0,0,${d.shadowAlpha.toFixed(2)})`}
-              />
-              {/* Rim highlight */}
-              {d.showHl && (
-                <Circle
-                  cx={px - d.dr * 0.32}
-                  cy={py - d.dr * 0.32}
-                  r={d.dr * 0.34}
-                  fill={`rgba(255,255,255,${d.hlAlpha.toFixed(2)})`}
+              {/* Outer shadow crescent */}
+              <Circle cx={px + d.sOff} cy={py + d.sOff} r={d.dr}
+                fill={`rgba(0,0,0,${sA15})`} />
+              {/* Bowl */}
+              <Circle cx={px} cy={py} r={d.dr}
+                fill={`rgba(0,0,0,${sA})`} />
+              {/* Inner darker center */}
+              <Circle cx={px + d.dr * 0.1} cy={py + d.dr * 0.1} r={d.dr * 0.5}
+                fill={`rgba(0,0,0,${sA06})`} />
+              {/* Rim catch-light arc */}
+              {d.showRim && (
+                <Path
+                  d={`M${px - d.dr * 0.55} ${py - d.dr * 0.1}
+                      A${d.dr * 0.38} ${d.dr * 0.38} 0 0 1
+                      ${px - d.dr * 0.1} ${py - d.dr * 0.5}`}
+                  stroke={`rgba(255,255,255,${(d.hlA * 1.4).toFixed(2)})`}
+                  strokeWidth={d.dr * 0.3}
+                  fill="none"
+                  strokeLinecap="round"
                 />
+              )}
+              {/* Specular dot */}
+              {d.showSpec && (
+                <Circle cx={px - d.dr * 0.22} cy={py - d.dr * 0.25} r={d.dr * 0.18}
+                  fill={`rgba(255,255,255,${(d.hlA * 0.8).toFixed(2)})`} />
               )}
             </G>
           )
         })}
+
+        {/* Atmospheric rim darkening */}
+        <Circle cx={cx} cy={cy} r={R - 0.5} fill={`url(#${rimId})`} />
       </G>
 
-      {/* Specular highlight */}
+      {/* Specular highlight (on top) */}
       <Ellipse
-        cx={cx - R * 0.22}
-        cy={cy - R * 0.28}
-        rx={R * 0.26}
-        ry={R * 0.15}
+        cx={cx - R * 0.24} cy={cy - R * 0.30}
+        rx={R * 0.26} ry={R * 0.14}
         fill={`url(#${hlId})`}
-        transform={`rotate(-22, ${cx - R * 0.22}, ${cy - R * 0.28})`}
+        transform={`rotate(-24, ${cx - R * 0.24}, ${cy - R * 0.30})`}
       />
 
-      {/* Rim shadow */}
-      <Circle cx={cx} cy={cy} r={R - 0.5} fill="none" stroke="rgba(0,0,0,0.32)" strokeWidth={R * 0.045} />
+      {/* Fill light */}
+      <Circle cx={cx} cy={cy} r={R - 0.5} fill={`url(#${flId})`} />
     </Svg>
   )
 }
 
-// ─── Animated diamond ─────────────────────────────────────────
-function AnimatedDiamond({
-  containerSize, color, opacity, strokeWidth, scaleMin, scaleMax, duration
+// ─── Animated diamond (shared anim ref for sync) ──────────────
+function DiamondLayer({
+  containerSize, color, opacity, strokeWidth, halfSize, animValue
 }: {
   containerSize: number; color: string; opacity: number
-  strokeWidth: number; scaleMin: number; scaleMax: number; duration: number
+  strokeWidth: number; halfSize: number; animValue: Animated.Value
 }) {
-  const anim = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start()
-  }, [])
-
-  const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [scaleMin, scaleMax] })
   const S = containerSize
-  const H = S / 2
-  const gradId = `dg_${S}_${Math.round(opacity * 100)}`
+  const CX = S / 2, CY = S / 2
+
+  const h = animValue.interpolate({
+    inputRange: [0, 1], outputRange: [halfSize * 0.92, halfSize * 1.08]
+  })
+
+  // Build diamond path from animated half-size
+  // We animate scale instead of path for performance
+  const scale = animValue.interpolate({
+    inputRange: [0, 1], outputRange: [0.92, 1.08]
+  })
+
+  const gradId = `dg${Math.round(S)}_${Math.round(opacity * 100)}`
 
   return (
-    <Animated.View style={{ position: 'absolute', width: S, height: S, transform: [{ scale }] }}>
+    <Animated.View style={{
+      position: 'absolute', width: S, height: S,
+      transform: [{ scale }],
+    }}>
       <Svg width={S} height={S} viewBox={`0 0 ${S} ${S}`}>
         <Defs>
           <RadialGradient id={gradId} cx="50%" cy="50%" r="50%">
-            <Stop offset="0%"   stopColor={color} stopOpacity={opacity * 0.4} />
-            <Stop offset="55%"  stopColor={color} stopOpacity={opacity * 0.2} />
+            <Stop offset="0%"   stopColor={color} stopOpacity={opacity * 0.40} />
+            <Stop offset="55%"  stopColor={color} stopOpacity={opacity * 0.20} />
             <Stop offset="100%" stopColor={color} stopOpacity="0" />
           </RadialGradient>
         </Defs>
-        <Path d={`M${H},2 L${S-2},${H} L${H},${S-2} L2,${H} Z`} fill={`url(#${gradId})`} />
-        <Path d={`M${H},2 L${S-2},${H} L${H},${S-2} L2,${H} Z`} fill="none" stroke={color} strokeWidth={strokeWidth} strokeOpacity={opacity} strokeLinejoin="round" />
-        {[[H,2],[S-2,H],[H,S-2],[2,H]].map(([px,py],i) => (
-          <Circle key={i} cx={px} cy={py} r={2} fill={color} fillOpacity={opacity * 0.9} />
+        <Path
+          d={`M${CX},${CY - halfSize} L${CX + halfSize},${CY} L${CX},${CY + halfSize} L${CX - halfSize},${CY} Z`}
+          fill={`url(#${gradId})`}
+        />
+        <Path
+          d={`M${CX},${CY - halfSize} L${CX + halfSize},${CY} L${CX},${CY + halfSize} L${CX - halfSize},${CY} Z`}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeOpacity={opacity}
+          strokeLinejoin="round"
+        />
+        {/* Corner glints */}
+        {[[CX, CY - halfSize], [CX + halfSize, CY], [CX, CY + halfSize], [CX - halfSize, CY]].map(([px, py], i) => (
+          <Circle key={i} cx={px} cy={py} r={strokeWidth} fill={color} fillOpacity={opacity * 0.9} />
         ))}
       </Svg>
     </Animated.View>
@@ -180,24 +232,73 @@ function AnimatedDiamond({
 }
 
 // ─── Main RankBadge ───────────────────────────────────────────
+// All badges use the SAME canvas size (BADGE_SIZE) so icons align perfectly.
+// Ball is smaller for II/III to make room for diamonds within the same space.
+
+const BADGE_SIZE = 120  // fixed container — all tiers same size
+
 type Props = { tier: string; subTier: SubTier; size?: number }
 
-export function RankBadge({ tier, subTier, size = 80 }: Props) {
+export function RankBadge({ tier, subTier, size = BADGE_SIZE }: Props) {
   const colors = TIER_COLORS[tier] || TIER_COLORS.bronze
-  const innerD = size * 1.58
-  const outerD = size * 2.12
-  const containerSize = subTier === 'III' ? outerD + 8 : subTier === 'II' ? innerD + 8 : size
+
+  // Ball radius: tier I = bigger, II/III = smaller to show diamonds
+  const ballSize = subTier === 'I' ? Math.round(size * 0.73) : Math.round(size * 0.57)
+
+  // Diamond half-sizes relative to container
+  const innerH = size * 0.40   // inner diamond half-size
+  const outerH = size * 0.47   // outer diamond half-size (III only)
+
+  // Shared animation for synchronized pulsing
+  const pulseAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (subTier === 'II' || subTier === 'III') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1, duration: 1800,
+            easing: Easing.inOut(Easing.sin), useNativeDriver: true
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0, duration: 1800,
+            easing: Easing.inOut(Easing.sin), useNativeDriver: true
+          }),
+        ])
+      ).start()
+    }
+  }, [subTier])
 
   return (
-    <View style={{ width: containerSize, height: containerSize, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+
+      {/* Tier III: outer large faint diamond — same pulse as inner */}
       {subTier === 'III' && (
-        <AnimatedDiamond containerSize={outerD} color={colors.glow} opacity={0.28} strokeWidth={1.5} scaleMin={0.91} scaleMax={1.09} duration={2200} />
+        <DiamondLayer
+          containerSize={size}
+          color={colors.glow}
+          opacity={0.28}
+          strokeWidth={1.5}
+          halfSize={outerH}
+          animValue={pulseAnim}
+        />
       )}
+
+      {/* Tier II + III: inner diamond */}
       {(subTier === 'II' || subTier === 'III') && (
-        <AnimatedDiamond containerSize={innerD} color={colors.glow} opacity={subTier === 'III' ? 0.68 : 0.75} strokeWidth={2} scaleMin={0.94} scaleMax={1.06} duration={1700} />
+        <DiamondLayer
+          containerSize={size}
+          color={colors.glow}
+          opacity={subTier === 'III' ? 0.68 : 0.75}
+          strokeWidth={2}
+          halfSize={innerH}
+          animValue={pulseAnim}
+        />
       )}
+
+      {/* Golf ball — centered, always on top */}
       <View style={{ position: 'absolute' }}>
-        <GolfBallSvg colors={colors} size={size} />
+        <GolfBallSvg colors={colors} size={ballSize} />
       </View>
     </View>
   )
