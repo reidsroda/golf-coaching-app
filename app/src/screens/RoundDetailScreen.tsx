@@ -11,6 +11,11 @@ const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v17803
 
 const PAR = 72
 
+// Scorecard dimensions
+const LABEL_W = 56   // fixed left column width
+const CELL_W  = 36   // each data cell width
+const ROW_H   = 40   // row height
+
 type HoleScore = {
   hole_number: number
   score: number
@@ -25,6 +30,14 @@ type CourseHole = {
   par: number
 }
 
+type Col = {
+  key: string
+  label: string
+  par: number | null
+  score: number | null
+  type: 'hole' | 'total' | 'grandTotal'
+}
+
 function scoreBg(score: number, par: number): string {
   const d = score - par
   if (d <= -2) return '#1E4530'
@@ -34,7 +47,7 @@ function scoreBg(score: number, par: number): string {
   return C.errorRed
 }
 
-function scoreTextColor(score: number, par: number): string {
+function scoreTextCol(score: number, par: number): string {
   const d = score - par
   if (d <= -1) return '#FFFFFF'
   if (d === 0) return C.ink1
@@ -42,143 +55,174 @@ function scoreTextColor(score: number, par: number): string {
   return '#FFFFFF'
 }
 
-function HoleRow({
-  hole, par, score, isHeader, isSub,
-}: {
-  hole: string | number; par: string | number; score: string | number
-  isHeader?: boolean; isSub?: boolean
-}) {
-  const isNum = typeof score === 'number' && typeof par === 'number'
-  const bg = isNum ? scoreBg(score, par) : 'transparent'
-  const textC = isNum ? scoreTextColor(score, par) : (isHeader ? C.ink3 : C.ink1)
-
-  return (
-    <View style={[sc.row, isSub && sc.subRow]}>
-      <Text style={[sc.holeCell, isHeader && sc.headerText, isSub && sc.subText]}>
-        {hole}
-      </Text>
-      <Text style={[sc.parCell, isHeader && sc.headerText, isSub && sc.subText]}>
-        {par}
-      </Text>
-      <View style={[sc.scoreWrap, isNum && bg !== 'transparent' ? { backgroundColor: bg, borderRadius: 6 } : null]}>
-        <Text style={[sc.scoreCell, isHeader && sc.headerText, isSub && sc.subText, isNum ? { color: textC } : null]}>
-          {score}
-        </Text>
-      </View>
-    </View>
-  )
-}
-
-const sc = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.hairline },
-  subRow: { backgroundColor: C.insetBg },
-  holeCell: { width: 44, fontFamily: F.mono, fontSize: 13, color: C.ink2, textAlign: 'center' },
-  parCell: { flex: 1, fontFamily: F.mono, fontSize: 13, color: C.ink2, textAlign: 'center' },
-  scoreWrap: { width: 52, alignItems: 'center', paddingVertical: 3 },
-  scoreCell: { fontFamily: F.sansSemiBold, fontSize: 14, color: C.ink1, textAlign: 'center' },
-  headerText: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1, color: C.ink3 },
-  subText: { fontFamily: F.sansBold, fontSize: 13 },
-})
-
-function Scorecard({ holeScores, courseHoles, holesPlayed }: {
+// ─── Horizontal scorecard ──────────────────────────────────
+function HorizontalScorecard({ holeScores, courseHoles, holesPlayed }: {
   holeScores: HoleScore[]
   courseHoles: CourseHole[]
   holesPlayed: number
 }) {
   if (holeScores.length === 0) {
     return (
-      <View style={s.noHoles}>
-        <Text style={s.noHolesText}>Hole-by-hole scores not available for this round</Text>
+      <View style={sc.noData}>
+        <Text style={sc.noDataText}>Hole-by-hole scores not available for this round</Text>
       </View>
     )
   }
 
-  function getPar(hNum: number): number | null {
-    return courseHoles.find(c => c.hole_number === hNum)?.par ?? null
+  function getPar(h: number): number | null {
+    return courseHoles.find(c => c.hole_number === h)?.par ?? null
+  }
+  function getScore(h: number): number | null {
+    return holeScores.find(s => s.hole_number === h)?.score ?? null
   }
 
-  function getScore(hNum: number): number | null {
-    return holeScores.find(h => h.hole_number === hNum)?.score ?? null
+  // Build column list
+  const cols: Col[] = []
+
+  // Front 9
+  for (let h = 1; h <= Math.min(9, holesPlayed); h++) {
+    cols.push({ key: `h${h}`, label: `${h}`, par: getPar(h), score: getScore(h), type: 'hole' })
   }
 
-  function sum9(start: number, end: number, type: 'par' | 'score'): number {
-    let total = 0
-    for (let h = start; h <= end; h++) {
-      const v = type === 'par' ? getPar(h) : getScore(h)
-      total += v ?? 0
+  const front9Par   = cols.reduce((s, c) => s + (c.par ?? 0), 0)
+  const front9Score = cols.reduce((s, c) => s + (c.score ?? 0), 0)
+  cols.push({ key: 'out', label: 'OUT', par: front9Par || null, score: front9Score || null, type: 'total' })
+
+  // Back 9
+  if (holesPlayed === 18) {
+    const back9Cols: Col[] = []
+    for (let h = 10; h <= 18; h++) {
+      back9Cols.push({ key: `h${h}`, label: `${h}`, par: getPar(h), score: getScore(h), type: 'hole' })
     }
-    return total
+    const back9Par   = back9Cols.reduce((s, c) => s + (c.par ?? 0), 0)
+    const back9Score = back9Cols.reduce((s, c) => s + (c.score ?? 0), 0)
+    cols.push(...back9Cols)
+    cols.push({ key: 'in',  label: 'IN',  par: back9Par || null,  score: back9Score || null,  type: 'total' })
+    cols.push({
+      key: 'tot', label: 'TOT',
+      par: (front9Par + back9Par) || null,
+      score: (front9Score + back9Score) || null,
+      type: 'grandTotal',
+    })
   }
 
-  const front9Par   = sum9(1, 9, 'par')
-  const front9Score = sum9(1, 9, 'score')
-  const back9Par    = sum9(10, 18, 'par')
-  const back9Score  = sum9(10, 18, 'score')
+  const isSub = (col: Col) => col.type === 'total' || col.type === 'grandTotal'
 
-  const hasPar = courseHoles.length > 0
+  // Three rows: hole labels, par, score
+  const rows: Array<{
+    label: string
+    getValue: (col: Col) => string | number
+    colored?: boolean
+  }> = [
+    { label: 'PAR',   getValue: c => c.par   != null ? c.par   : '—' },
+    { label: 'SCORE', getValue: c => c.score != null ? c.score : '—', colored: true },
+  ]
 
   return (
-    <View style={s.scorecardCard}>
-      <Text style={s.scorecardTitle}>SCORECARD</Text>
+    <View style={sc.card}>
+      <Text style={sc.title}>SCORECARD</Text>
 
-      {/* Header */}
-      <HoleRow hole="HOLE" par="PAR" score="SCORE" isHeader />
+      <View style={sc.tableWrap}>
+        {/* Fixed left label column */}
+        <View style={sc.labelCol}>
+          {/* Header spacer */}
+          <View style={[sc.cell, sc.headerCell]}>
+            <Text style={sc.headerLabel}>HOLE</Text>
+          </View>
+          {rows.map(row => (
+            <View key={row.label} style={sc.cell}>
+              <Text style={sc.rowLabel}>{row.label}</Text>
+            </View>
+          ))}
+        </View>
 
-      {/* Front 9 */}
-      {Array.from({ length: Math.min(9, holesPlayed) }, (_, i) => i + 1).map(h => {
-        const par = getPar(h)
-        const score = getScore(h)
-        return (
-          <HoleRow
-            key={h}
-            hole={h}
-            par={hasPar && par != null ? par : '—'}
-            score={score != null ? score : '—'}
-          />
-        )
-      })}
+        {/* Scrollable data columns */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flex: 1 }}
+          bounces={false}
+        >
+          <View>
+            {/* Hole numbers header row */}
+            <View style={[sc.dataRow, sc.headerDataRow]}>
+              {cols.map(col => (
+                <View key={col.key} style={[sc.dataCell, isSub(col) && sc.subCell]}>
+                  <Text style={[sc.headerNum, isSub(col) && sc.subHeaderNum]}>{col.label}</Text>
+                </View>
+              ))}
+            </View>
 
-      {/* Front 9 total */}
-      <HoleRow
-        hole="OUT"
-        par={hasPar ? front9Par || '—' : '—'}
-        score={front9Score || '—'}
-        isSub
-      />
+            {rows.map(row => (
+              <View key={row.label} style={sc.dataRow}>
+                {cols.map(col => {
+                  const val = row.getValue(col)
+                  const isHoleScore = row.colored && col.type === 'hole'
+                    && typeof col.score === 'number' && typeof col.par === 'number'
+                  const bg = isHoleScore ? scoreBg(col.score!, col.par!) : 'transparent'
+                  const textColor = isHoleScore ? scoreTextCol(col.score!, col.par!) : C.ink1
 
-      {/* Back 9 */}
-      {holesPlayed === 18 && (
-        <>
-          {Array.from({ length: 9 }, (_, i) => i + 10).map(h => {
-            const par = getPar(h)
-            const score = getScore(h)
-            return (
-              <HoleRow
-                key={h}
-                hole={h}
-                par={hasPar && par != null ? par : '—'}
-                score={score != null ? score : '—'}
-              />
-            )
-          })}
-          <HoleRow
-            hole="IN"
-            par={hasPar ? back9Par || '—' : '—'}
-            score={back9Score || '—'}
-            isSub
-          />
-          <HoleRow
-            hole="TOT"
-            par={hasPar ? (front9Par + back9Par) || '—' : '—'}
-            score={(front9Score + back9Score) || '—'}
-            isSub
-          />
-        </>
-      )}
+                  return (
+                    <View
+                      key={col.key}
+                      style={[sc.dataCell, isSub(col) && sc.subCell]}
+                    >
+                      <View style={[
+                        sc.scoreInner,
+                        bg !== 'transparent' && { backgroundColor: bg },
+                      ]}>
+                        <Text style={[
+                          sc.dataText,
+                          isSub(col) && sc.subDataText,
+                          row.colored && { color: textColor },
+                        ]}>
+                          {val}
+                        </Text>
+                      </View>
+                    </View>
+                  )
+                })}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   )
 }
 
+const sc = StyleSheet.create({
+  card: {
+    backgroundColor: C.cardBg, borderRadius: 16,
+    borderWidth: 1, borderColor: C.border,
+    overflow: 'hidden', paddingTop: 16, paddingBottom: 4,
+  },
+  title: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, paddingHorizontal: 16, marginBottom: 8 },
+  tableWrap: { flexDirection: 'row' },
+
+  // Fixed left column
+  labelCol: { width: LABEL_W, borderRightWidth: 1, borderRightColor: C.hairline },
+  cell: { height: ROW_H, alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 12 },
+  headerCell: { backgroundColor: C.insetBg, borderBottomWidth: 1, borderBottomColor: C.hairline },
+  headerLabel: { fontFamily: F.mono, fontSize: 9, letterSpacing: 1, color: C.ink3 },
+  rowLabel: { fontFamily: F.mono, fontSize: 11, color: C.ink2 },
+
+  // Data columns
+  dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: C.hairline },
+  headerDataRow: { backgroundColor: C.insetBg },
+  dataCell: { width: CELL_W, height: ROW_H, alignItems: 'center', justifyContent: 'center' },
+  subCell: { width: CELL_W + 8, backgroundColor: 'rgba(30,42,36,0.06)' },
+  headerNum: { fontFamily: F.mono, fontSize: 11, color: C.ink2 },
+  subHeaderNum: { fontFamily: F.sansBold, fontSize: 10, color: C.ink1 },
+  scoreInner: { width: 28, height: 26, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  dataText: { fontFamily: F.sans, fontSize: 13, color: C.ink1, textAlign: 'center' },
+  subDataText: { fontFamily: F.sansBold, fontSize: 13 },
+
+  noData: { backgroundColor: C.cardBg, borderRadius: 16, borderWidth: 1, borderColor: C.border, alignItems: 'center', paddingVertical: 32, paddingHorizontal: 20 },
+  noDataText: { fontFamily: F.sans, fontSize: 14, color: C.ink3, textAlign: 'center' },
+})
+
+// ─── Screen ─────────────────────────────────────────────────
 export default function RoundDetailScreen({ route, navigation }: any) {
   const { round } = route.params
   const [holeScores, setHoleScores] = useState<HoleScore[]>([])
@@ -197,14 +241,12 @@ export default function RoundDetailScreen({ route, navigation }: any) {
 
   useEffect(() => {
     async function load() {
-      // Fetch full round for tee_set_id
       const { data: fullRound } = await supabase
         .from('rounds')
         .select('tee_set_id')
         .eq('id', round.id)
         .single()
 
-      // Fetch hole scores
       const { data: holes } = await supabase
         .from('holes')
         .select('hole_number, score, putts, fairway_hit, gir, penalties')
@@ -212,7 +254,6 @@ export default function RoundDetailScreen({ route, navigation }: any) {
         .order('hole_number')
       setHoleScores(holes || [])
 
-      // Fetch par data from course_holes if tee_set_id available
       if (fullRound?.tee_set_id) {
         const { data: choles } = await supabase
           .from('course_holes')
@@ -229,10 +270,10 @@ export default function RoundDetailScreen({ route, navigation }: any) {
   }, [round.id])
 
   const stats = [
-    { label: 'Putts',    value: round.total_putts  ?? '—', sub: 'total' },
-    { label: 'Fairways', value: round.fairways_hit ?? '—', sub: `of ${round.holes === 9 ? 7 : 14}` },
-    { label: 'GIR',      value: round.gir          ?? '—', sub: `of ${round.holes}` },
-    { label: 'Penalties',value: round.penalties    ?? '—', sub: 'total' },
+    { label: 'Putts',     value: round.total_putts  ?? '—', sub: 'total' },
+    { label: 'Fairways',  value: round.fairways_hit ?? '—', sub: `of ${round.holes === 9 ? 7 : 14}` },
+    { label: 'GIR',       value: round.gir          ?? '—', sub: `of ${round.holes}` },
+    { label: 'Penalties', value: round.penalties    ?? '—', sub: 'total' },
   ]
 
   return (
@@ -282,7 +323,7 @@ export default function RoundDetailScreen({ route, navigation }: any) {
             <ActivityIndicator color={C.fairway} />
           </View>
         ) : (
-          <Scorecard
+          <HorizontalScorecard
             holeScores={holeScores}
             courseHoles={courseHoles}
             holesPlayed={round.holes || 18}
@@ -332,13 +373,4 @@ const s = StyleSheet.create({
   statSub: { fontFamily: F.mono, fontSize: 10, color: C.ink3, marginTop: 2 },
 
   loadingWrap: { paddingVertical: 40, alignItems: 'center' },
-
-  scorecardCard: {
-    backgroundColor: C.cardBg, borderRadius: 16, borderWidth: 1, borderColor: C.border,
-    overflow: 'hidden', paddingHorizontal: 12, paddingTop: 16, paddingBottom: 4,
-  },
-  scorecardTitle: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 12 },
-
-  noHoles: { alignItems: 'center', paddingVertical: 32, backgroundColor: C.cardBg, borderRadius: 16, borderWidth: 1, borderColor: C.border },
-  noHolesText: { fontFamily: F.sans, fontSize: 14, color: C.ink3, textAlign: 'center' },
 })

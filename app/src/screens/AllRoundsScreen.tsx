@@ -106,9 +106,9 @@ function SwipeableRoundRow({
         'Delete this round?',
         'This round will be permanently removed from your account and cannot be recovered.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'No', style: 'cancel' },
           {
-            text: 'Delete',
+            text: 'Yes',
             style: 'destructive',
             onPress: onDelete,
           },
