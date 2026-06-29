@@ -208,7 +208,7 @@ function RankModal({ visible, onClose, currentRank, handicap }: any) {
             const isPast = i > currentIdx
             return (
               <View key={rank.name} style={[rm.rankRow, isCurrent && rm.rankRowActive]}>
-                <RankBadge tier={rank.tier} subTier={rank.subTier} size={36} />
+                <RankBadge tier={rank.tier} subTier={rank.subTier} size={100} />
                 <View style={rm.rankInfo}>
                   <Text style={[rm.rankName, { color: isPast ? C.ink3 : rank.color }]}>{rank.name}</Text>
                   <Text style={rm.rankRange}>Hdcp {rank.minHdcp === -10 ? 'Below 0' : rank.minHdcp} – {rank.maxHdcp === 99 ? '36+' : rank.maxHdcp}</Text>
@@ -515,7 +515,7 @@ export default function AccountScreen({ navigation }: any) {
         <View style={s.metricRow}>
           {/* Rank — clickable */}
           <TouchableOpacity style={[s.metricCard, { borderTopColor: rank.color, borderTopWidth: 3 }]} onPress={() => setShowRank(true)} activeOpacity={0.8}>
-            <RankBadge tier={rank.tier} subTier={rank.subTier} size={64} />
+            <RankBadge tier={rank.tier} subTier={rank.subTier} size={180} />
             <Text style={[s.rankName, { color: rank.color }]}>{rank.name}</Text>
             <Text style={s.metricCardLabel}>YOUR RANK</Text>
             <Text style={s.rankSub}>Tap to explore</Text>
