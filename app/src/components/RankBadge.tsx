@@ -243,27 +243,30 @@ export function RankBadge({ tier, subTier, size = BADGE_SIZE }: Props) {
   const colors = TIER_COLORS[tier] || TIER_COLORS.bronze
 
   // Ball radius: tier I = bigger, II/III = smaller to show diamonds
-  const ballSize = subTier === 'I' ? Math.round(size * 0.73) : Math.round(size * 0.57)
+  const ballSize = subTier === 'I' ? Math.round(size * 0.88) : Math.round(size * 0.72)
 
   // Diamond half-sizes relative to container
-  const innerH = size * 0.40   // inner diamond half-size
-  const outerH = size * 0.47   // outer diamond half-size (III only)
+  const innerH = size * 0.50   // inner diamond half-size
+  const outerH = size * 0.60   // outer diamond half-size (III only)
 
-  // Shared animation for synchronized pulsing
-  const pulseAnim = useRef(new Animated.Value(0)).current
+  // Independent animations for non-unison pulse
+  const innerAnim = useRef(new Animated.Value(0)).current
+  const outerAnim = useRef(new Animated.Value(0.5)).current  // offset start
 
   useEffect(() => {
     if (subTier === 'II' || subTier === 'III') {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1, duration: 1800,
-            easing: Easing.inOut(Easing.sin), useNativeDriver: true
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0, duration: 1800,
-            easing: Easing.inOut(Easing.sin), useNativeDriver: true
-          }),
+          Animated.timing(innerAnim, { toValue: 1, duration: 1700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(innerAnim, { toValue: 0, duration: 1700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      ).start()
+    }
+    if (subTier === 'III') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(outerAnim, { toValue: 1, duration: 2300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(outerAnim, { toValue: 0, duration: 2300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])
       ).start()
     }
@@ -272,7 +275,7 @@ export function RankBadge({ tier, subTier, size = BADGE_SIZE }: Props) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
 
-      {/* Tier III: outer large faint diamond — same pulse as inner */}
+      {/* Tier III: outer large faint diamond — independent pulse */}
       {subTier === 'III' && (
         <DiamondLayer
           containerSize={size}
@@ -280,11 +283,11 @@ export function RankBadge({ tier, subTier, size = BADGE_SIZE }: Props) {
           opacity={0.28}
           strokeWidth={1.5}
           halfSize={outerH}
-          animValue={pulseAnim}
+          animValue={outerAnim}
         />
       )}
 
-      {/* Tier II + III: inner diamond */}
+      {/* Tier II + III: inner diamond — independent pulse */}
       {(subTier === 'II' || subTier === 'III') && (
         <DiamondLayer
           containerSize={size}
@@ -292,7 +295,7 @@ export function RankBadge({ tier, subTier, size = BADGE_SIZE }: Props) {
           opacity={subTier === 'III' ? 0.68 : 0.75}
           strokeWidth={2}
           halfSize={innerH}
-          animValue={pulseAnim}
+          animValue={innerAnim}
         />
       )}
 
@@ -313,7 +316,7 @@ export type Rank = {
 
 export const RANKS: Rank[] = [
   { name: 'Grand Master', tier: 'grandmaster', subTier: 'III', color: '#8B5CF6', minHdcp: -10, maxHdcp: 0,  worstStat: 'course management', motivation: 'Elite status. Focus on scoring even lower through smart course management.' },
-  { name: 'Master',       tier: 'master',      subTier: 'III', color: '#B14B3A', minHdcp: 0,   maxHdcp: 2,  worstStat: 'approach play',     motivation: 'Tighten your approach shots to make Grand Master within reach.' },
+  { name: 'Master',       tier: 'grandmaster', subTier: 'II',  color: '#8B5CF6', minHdcp: 0,   maxHdcp: 2,  worstStat: 'approach play',     motivation: 'Tighten your approach shots to make Grand Master within reach.' },
   { name: 'Diamond III',  tier: 'diamond',     subTier: 'III', color: '#4A9BE8', minHdcp: 2,   maxHdcp: 5,  worstStat: 'iron play',         motivation: 'Sharpen your irons to climb into the Master tier.' },
   { name: 'Diamond II',   tier: 'diamond',     subTier: 'II',  color: '#4A9BE8', minHdcp: 5,   maxHdcp: 8,  worstStat: 'chipping',          motivation: 'A sharper short game will unlock Diamond III.' },
   { name: 'Diamond I',    tier: 'diamond',     subTier: 'I',   color: '#4A9BE8', minHdcp: 8,   maxHdcp: 11, worstStat: 'putting',           motivation: 'Fewer 3-putts per round is your fastest path to Diamond II.' },
