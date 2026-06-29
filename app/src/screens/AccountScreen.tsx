@@ -9,37 +9,12 @@ import * as ImagePicker from 'expo-image-picker'
 
 import { supabase } from '../lib/supabase'
 import { C, F } from '../theme'
+import { RankBadge, getRank, RANKS, type Rank } from '../components/RankBadge'
 
 const { width } = Dimensions.get('window')
 const TOPO_BG = { uri: 'https://res.cloudinary.com/dtihqaiut/image/upload/v1780335688/TopographicBackground_n5rvzu.png' }
 
-// ─── Rank system ──────────────────────────────────────────────
-type Rank = {
-  name: string; tier: string; color: string
-  minHdcp: number; maxHdcp: number
-  worstStat: string; motivation: string
-}
-
-const RANKS: Rank[] = [
-  { name: 'Grand Master', tier: 'grandmaster', color: '#C9A23E', minHdcp: -10, maxHdcp: 0,  worstStat: 'course management', motivation: 'Elite status. Focus on scoring even lower through smart course management.' },
-  { name: 'Master',       tier: 'master',      color: '#B14B3A', minHdcp: 0,   maxHdcp: 2,  worstStat: 'approach play',     motivation: 'Tighten your approach shots to make Grand Master within reach.' },
-  { name: 'Diamond III',  tier: 'diamond',     color: '#7BA9C8', minHdcp: 2,   maxHdcp: 5,  worstStat: 'iron play',         motivation: 'Sharpen your irons to climb into the Master tier.' },
-  { name: 'Diamond II',   tier: 'diamond',     color: '#7BA9C8', minHdcp: 5,   maxHdcp: 8,  worstStat: 'chipping',          motivation: 'A sharper short game will unlock Diamond III.' },
-  { name: 'Diamond I',    tier: 'diamond',     color: '#7BA9C8', minHdcp: 8,   maxHdcp: 11, worstStat: 'putting',           motivation: 'Fewer 3-putts per round is your fastest path to Diamond II.' },
-  { name: 'Gold III',     tier: 'gold',        color: '#C9A23E', minHdcp: 11,  maxHdcp: 14, worstStat: 'driving accuracy',  motivation: 'More fairways hit will open up shorter approaches to Diamond I.' },
-  { name: 'Gold II',      tier: 'gold',        color: '#C9A23E', minHdcp: 14,  maxHdcp: 17, worstStat: 'greens in reg',     motivation: 'Hitting more greens will consistently lower your scores toward Gold III.' },
-  { name: 'Gold I',       tier: 'gold',        color: '#C9A23E', minHdcp: 17,  maxHdcp: 20, worstStat: 'putting',           motivation: 'Cutting 2 putts per round could move you up a full tier to Gold II.' },
-  { name: 'Silver III',   tier: 'silver',      color: '#9CA3AF', minHdcp: 20,  maxHdcp: 23, worstStat: 'chipping',          motivation: 'Getting up and down more often is the key to reaching Gold I.' },
-  { name: 'Silver II',    tier: 'silver',      color: '#9CA3AF', minHdcp: 23,  maxHdcp: 26, worstStat: 'driving',           motivation: 'Add 20 yards off the tee and watch your scores drop toward Silver III.' },
-  { name: 'Silver I',     tier: 'silver',      color: '#9CA3AF', minHdcp: 26,  maxHdcp: 29, worstStat: 'iron consistency', motivation: 'More consistent iron shots will get you to Silver II faster than anything.' },
-  { name: 'Bronze III',   tier: 'bronze',      color: '#C26B3C', minHdcp: 29,  maxHdcp: 32, worstStat: 'penalty avoidance',motivation: 'Eliminate one penalty stroke per round and Silver I is yours.' },
-  { name: 'Bronze II',    tier: 'bronze',      color: '#C26B3C', minHdcp: 32,  maxHdcp: 36, worstStat: 'course management',motivation: 'Smarter club selection will immediately cut strokes toward Bronze III.' },
-  { name: 'Bronze I',     tier: 'bronze',      color: '#C26B3C', minHdcp: 36,  maxHdcp: 99, worstStat: 'fundamentals',     motivation: 'Keep logging rounds — every round teaches you something. Bronze II is close.' },
-]
-
-function getRank(handicap: number): Rank {
-  return RANKS.find(r => handicap >= r.minHdcp && handicap < r.maxHdcp) || RANKS[RANKS.length - 1]
-}
+// Rank system imported from ../components/RankBadge
 
 // ─── WHOOP-style animated handicap bubble ─────────────────────
 function HandicapBubble({ handicap }: { handicap: number }) {
@@ -233,7 +208,7 @@ function RankModal({ visible, onClose, currentRank, handicap }: any) {
             const isPast = i > currentIdx
             return (
               <View key={rank.name} style={[rm.rankRow, isCurrent && rm.rankRowActive]}>
-                <View style={[rm.rankDot, { backgroundColor: isPast ? C.bunker : rank.color }]} />
+                <RankBadge tier={rank.tier} subTier={rank.subTier} size={36} />
                 <View style={rm.rankInfo}>
                   <Text style={[rm.rankName, { color: isPast ? C.ink3 : rank.color }]}>{rank.name}</Text>
                   <Text style={rm.rankRange}>Hdcp {rank.minHdcp === -10 ? 'Below 0' : rank.minHdcp} – {rank.maxHdcp === 99 ? '36+' : rank.maxHdcp}</Text>
@@ -540,9 +515,7 @@ export default function AccountScreen({ navigation }: any) {
         <View style={s.metricRow}>
           {/* Rank — clickable */}
           <TouchableOpacity style={[s.metricCard, { borderTopColor: rank.color, borderTopWidth: 3 }]} onPress={() => setShowRank(true)} activeOpacity={0.8}>
-            <View style={[s.rankBadge, { backgroundColor: rank.color }]}>
-              <Ionicons name="trophy" size={22} color="#fff" />
-            </View>
+            <RankBadge tier={rank.tier} subTier={rank.subTier} size={64} />
             <Text style={[s.rankName, { color: rank.color }]}>{rank.name}</Text>
             <Text style={s.metricCardLabel}>YOUR RANK</Text>
             <Text style={s.rankSub}>Tap to explore</Text>
