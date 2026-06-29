@@ -235,7 +235,7 @@ function DiamondLayer({
 // All badges use the SAME canvas size (BADGE_SIZE) so icons align perfectly.
 // Ball is smaller for II/III to make room for diamonds within the same space.
 
-const BADGE_SIZE = 180  // fixed container — all tiers same size
+const BADGE_SIZE = 260  // fixed container — all tiers same size
 
 type Props = { tier: string; subTier: SubTier; size?: number }
 
