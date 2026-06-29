@@ -19,6 +19,7 @@ import HeatmapScreen from '../screens/HeatmapScreen'
 import SpiderChartScreen from '../screens/SpiderChartScreen'
 import MetricDetailScreen from '../screens/MetricDetailScreen'
 import AllRoundsScreen from '../screens/AllRoundsScreen'
+import RoundDetailScreen from '../screens/RoundDetailScreen'
 
 import { C, F } from '../theme'
 
@@ -45,6 +46,7 @@ function StatsStack() {
       <Stack.Screen name="SpiderChart" component={SpiderChartScreen} />
       <Stack.Screen name="MetricDetail" component={MetricDetailScreen} />
       <Stack.Screen name="AllRounds" component={AllRoundsScreen} />
+      <Stack.Screen name="RoundDetail" component={RoundDetailScreen} />
     </Stack.Navigator>
   )
 }
