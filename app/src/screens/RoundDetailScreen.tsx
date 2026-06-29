@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ImageBackground, ActivityIndicator
+  ImageBackground, ActivityIndicator, Alert
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -224,13 +224,32 @@ const sc = StyleSheet.create({
 
 // ─── Screen ─────────────────────────────────────────────────
 export default function RoundDetailScreen({ route, navigation }: any) {
-  const { round } = route.params
+  const { round, onRoundDeleted } = route.params
   const [holeScores, setHoleScores] = useState<HoleScore[]>([])
   const [courseHoles, setCourseHoles] = useState<CourseHole[]>([])
   const [loading, setLoading] = useState(true)
 
   const par = PAR
   const score = round.total_score || 0
+
+  function handleDeletePress() {
+    Alert.alert(
+      'Delete this round?',
+      'This will permanently remove the round from your account.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.from('rounds').delete().eq('id', round.id)
+            onRoundDeleted?.(round.id)
+            navigation.goBack()
+          },
+        },
+      ]
+    )
+  }
   const diff = score - par
   const diffStr = diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `${diff}`
   const isOver = diff > 0
@@ -283,7 +302,9 @@ export default function RoundDetailScreen({ route, navigation }: any) {
           <Ionicons name="chevron-back" size={22} color={C.ink1} />
         </TouchableOpacity>
         <Text style={s.topTitle}>Round</Text>
-        <View style={{ width: 36 }} />
+        <TouchableOpacity style={s.deleteBtn} onPress={handleDeletePress} activeOpacity={0.8}>
+          <Ionicons name="trash-outline" size={18} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
@@ -345,6 +366,11 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.hairline,
   },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: C.errorRed,
+    alignItems: 'center', justifyContent: 'center',
+  },
   topTitle: { fontFamily: F.sansSemiBold, fontSize: 17, color: C.ink1 },
   container: { padding: 24 },
   eyebrow: { fontFamily: F.mono, fontSize: 10, letterSpacing: 1.2, color: C.ink3, marginBottom: 4 },
